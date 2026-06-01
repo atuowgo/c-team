@@ -1,0 +1,8 @@
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@0.100.0'
+  - zustand@5.0.14
