@@ -109,6 +109,7 @@ export function ChannelView(): React.ReactElement {
           if (mentionedColleague) {
             window.electron
               .invoke("ai:task-create", {
+                colleague_id: mentionedColleague.id,
                 event_type: "chat_mention",
                 payload: {
                   channelId: selectedChannelId,

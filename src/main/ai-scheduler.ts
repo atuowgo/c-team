@@ -1,6 +1,7 @@
 import { getDatabase } from './database'
 import { BrowserWindow } from 'electron'
 import { startProgrammingSession } from './programming-session'
+import { getSetting } from './settings-store'
 
 class AiScheduler {
   private timer: ReturnType<typeof setInterval> | null = null
@@ -21,10 +22,20 @@ class AiScheduler {
     this.polling = true
     try {
       const db = getDatabase()
+
+      // Check concurrency limit
+      const maxConcurrency = (getSetting('maxConcurrency') as number) || 2
+      const busyCount = (db.prepare(
+        "SELECT COUNT(*) as count FROM ai_colleagues WHERE status = 'busy'"
+      ).get() as { count: number }).count
+      if (busyCount >= maxConcurrency) return
+
       // Find pending tasks with highest priority first
+      // Exclude waiting_approval — those are waiting for human review
+      // Limit to (maxConcurrency - busyCount) to not exceed concurrency cap
       const tasks = db.prepare(
-        `SELECT * FROM ai_task_queue WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT 5`
-      ).all() as Array<Record<string, unknown>>
+        `SELECT * FROM ai_task_queue WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT ?`
+      ).all(maxConcurrency - busyCount) as Array<Record<string, unknown>>
 
       for (const task of tasks) {
         await this.dispatchTask(task)
@@ -86,10 +97,14 @@ class AiScheduler {
   }
 
   // Called when a task completes to free up the colleague
+  // Does NOT free the colleague if task is waiting_approval (AI stays busy)
   completeTask(taskId: string): void {
     const db = getDatabase()
     const task = db.prepare('SELECT * FROM ai_task_queue WHERE id = ?').get(taskId) as Record<string, unknown> | undefined
     if (!task || !task.colleague_id) return
+
+    // Don't release colleague if waiting for plan approval
+    if (task.status === 'waiting_approval') return
 
     db.prepare(
       `UPDATE ai_colleagues SET status = 'idle', current_task = NULL WHERE id = ?`

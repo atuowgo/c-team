@@ -36,6 +36,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { PlanReviewDialog } from "@/components/PlanReviewDialog"
 
 const priorityLabel: Record<string, string> = {
   low: "低",
@@ -92,6 +93,23 @@ export function BoardView() {
 
   // --- drag state ---
   const dragTicketId = useRef<string | null>(null)
+
+  // --- plan review state ---
+  const [planTickets, setPlanTickets] = useState<Set<string>>(new Set())
+
+  // Listen for plan events
+  useEffect(() => {
+    const unsub1 = window.electron.on("ai:plan-submitted", (_e: unknown, _taskId: string, ticketId: string) => {
+      setPlanTickets((prev) => new Set(prev).add(ticketId))
+    })
+    const unsub2 = window.electron.on("ai:plan-approved", () => {
+      refreshBoardData()
+    })
+    const unsub3 = window.electron.on("ai:plan-rejected", () => {
+      refreshBoardData()
+    })
+    return () => { unsub1(); unsub2(); unsub3() }
+  }, [refreshBoardData])
 
   // ============================================================
   // data fetching
@@ -402,6 +420,11 @@ export function BoardView() {
           </div>
           {ticket.assignee && (
             <p className="text-xs text-muted-foreground">{ticket.assignee}</p>
+          )}
+          {planTickets.has(ticket.id) && (
+            <Badge variant="secondary" className="text-xs bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+              方案待审批
+            </Badge>
           )}
         </CardContent>
       </Card>
@@ -793,6 +816,9 @@ export function BoardView() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ======== Plan Review Dialog ======== */}
+      <PlanReviewDialog />
 
       {/* ======== Create/Edit Ticket dialog ======== */}
       <Dialog

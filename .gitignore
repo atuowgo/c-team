@@ -10,3 +10,15 @@ out/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 日志文件
+*.log
+
+# TypeScript 增量编译缓存
+*.tsbuildinfo
+
+# electron-vite 临时配置
+electron.vite.config.*.mjs
+
+# electron-builder 打包输出
+build/

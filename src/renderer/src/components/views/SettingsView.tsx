@@ -38,6 +38,7 @@ export function SettingsView(): React.ReactElement {
   // API config
   const [apiKey, setApiKey] = useState("")
   const [model, setModel] = useState(MODELS[0].value)
+  const [maxConcurrency, setMaxConcurrency] = useState("2")
   const [apiSaved, setApiSaved] = useState(false)
   const [apiSaving, setApiSaving] = useState(false)
 
@@ -62,6 +63,10 @@ export function SettingsView(): React.ReactElement {
       }),
       window.electron.invoke("settings:get", "model").then((v) => {
         if (typeof v === "string" && v) setModel(v)
+      }),
+      window.electron.invoke("settings:get", "maxConcurrency").then((v) => {
+        if (typeof v === "string" && v) setMaxConcurrency(v)
+        else if (typeof v === "number" && v) setMaxConcurrency(String(v))
       }),
       window.electron.invoke("settings:get", "ghToken").then((v) => {
         if (typeof v === "string" && v) setGhToken(v)
@@ -92,11 +97,12 @@ export function SettingsView(): React.ReactElement {
     Promise.all([
       window.electron.invoke("settings:set", "apiKey", apiKey),
       window.electron.invoke("settings:set", "model", model),
+      window.electron.invoke("settings:set", "maxConcurrency", Number(maxConcurrency)),
     ]).then(() => {
       setApiSaved(true)
       setTimeout(() => setApiSaved(false), 2000)
     }).catch((e) => addToast("error", `保存API配置失败: ${e instanceof Error ? e.message : String(e)}`)).finally(() => setApiSaving(false))
-  }, [apiKey, model, addToast])
+  }, [apiKey, model, maxConcurrency, addToast])
 
   const handleSaveGh = useCallback((e: FormEvent) => {
     e.preventDefault()
@@ -155,6 +161,21 @@ export function SettingsView(): React.ReactElement {
                       {MODELS.map((m) => (
                         <SelectItem key={m.value} value={m.value}>
                           {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max-concurrency">AI 最大并发数</Label>
+                  <Select value={maxConcurrency} onValueChange={setMaxConcurrency}>
+                    <SelectTrigger id="max-concurrency">
+                      <SelectValue placeholder="选择并发数" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["1", "2", "3", "4", "5"].map((n) => (
+                        <SelectItem key={n} value={n}>
+                          {n}
                         </SelectItem>
                       ))}
                     </SelectContent>

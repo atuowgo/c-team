@@ -61,11 +61,11 @@ async function githubFetch(url: string, options: RequestInit = {}, retries = 3):
     }
   }
 
-  const err = await responseTextFallback(url, lastStatus, options)
+  const err = await responseTextFallback(url, options)
   throw new Error(`GitHub API error ${lastStatus}: ${err}`)
 }
 
-async function responseTextFallback(url: string, status: number, options: RequestInit): Promise<string> {
+async function responseTextFallback(url: string, options: RequestInit): Promise<string> {
   try {
     const resp = await fetch(url, options)
     return await resp.text()
@@ -172,4 +172,79 @@ export async function listIssues(labels?: string[]): Promise<Array<{ number: num
 
 export function isConfigured(): boolean {
   return getConfig() !== null
+}
+
+export async function readFileContent(path: string, ref?: string): Promise<string> {
+  const config = getConfig()
+  if (!config) throw new Error('GitHub not configured')
+
+  let url = `${baseUrl(config)}/contents/${path}`
+  if (ref) url += `?ref=${encodeURIComponent(ref)}`
+
+  const resp = await githubFetch(url, { headers: authHeaders(config) })
+  const data = await resp.json()
+  // GitHub returns content as base64
+  const content = data.content as string
+  return Buffer.from(content, 'base64').toString('utf-8')
+}
+
+export async function listPRReviews(prNumber: number): Promise<
+  Array<{ id: number; user: string; state: string; body: string; submitted_at: string }>
+> {
+  const config = getConfig()
+  if (!config) throw new Error('GitHub not configured')
+
+  const resp = await githubFetch(`${baseUrl(config)}/pulls/${prNumber}/reviews`, {
+    headers: authHeaders(config)
+  })
+  const data = await resp.json()
+  return data.map((r: Record<string, unknown>) => ({
+    id: r.id as number,
+    user: (r.user as Record<string, unknown>)?.login as string,
+    state: r.state as string,
+    body: r.body as string,
+    submitted_at: r.submitted_at as string
+  }))
+}
+
+export async function getCIStatus(ref: string): Promise<{
+  state: string
+  statuses: Array<{ context: string; state: string; description: string }>
+}> {
+  const config = getConfig()
+  if (!config) throw new Error('GitHub not configured')
+
+  const resp = await githubFetch(`${baseUrl(config)}/commits/${encodeURIComponent(ref)}/status`, {
+    headers: authHeaders(config)
+  })
+  const data = await resp.json()
+  return {
+    state: data.state as string,
+    statuses: (data.statuses as Array<Record<string, unknown>> || []).map(s => ({
+      context: s.context as string,
+      state: s.state as string,
+      description: (s.description as string) || ''
+    }))
+  }
+}
+
+export async function createIssue(
+  title: string,
+  body?: string,
+  labels?: string[]
+): Promise<{ number: number; url: string }> {
+  const config = getConfig()
+  if (!config) throw new Error('GitHub not configured')
+
+  const requestBody: Record<string, unknown> = { title }
+  if (body) requestBody.body = body
+  if (labels?.length) requestBody.labels = labels
+
+  const resp = await githubFetch(`${baseUrl(config)}/issues`, {
+    method: 'POST',
+    headers: authHeaders(config),
+    body: JSON.stringify(requestBody)
+  })
+  const data = await resp.json()
+  return { number: data.number, url: data.html_url }
 }

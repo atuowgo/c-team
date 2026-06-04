@@ -1,14 +1,10 @@
+import { randomUUID } from 'crypto'
 import { getDatabase } from './database'
 import { callClaude } from './claude-api'
 import { createBranch, commitFile, createPullRequest } from './github-api'
 import { aiScheduler } from './ai-scheduler'
+import { startPlanningPhase } from './planning-phase'
 import { BrowserWindow } from 'electron'
-
-interface SessionContext {
-  taskId: string
-  colleagueId: string
-  ticketId: string
-}
 
 // Main entry point: called when a task is assigned to a colleague
 export async function startProgrammingSession(taskId: string): Promise<void> {
@@ -23,7 +19,14 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
   const ticketId = payload.ticketId as string | undefined
 
   if (!ticketId) {
-    // Not a programming task — skip
+    // Chat mention — generate a reply and post it as a message
+    const colleague = db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(colleagueId) as Record<string, unknown> | undefined
+    if (!colleague) {
+      db.prepare("UPDATE ai_task_queue SET status='failed', result=? WHERE id=?").run('Colleague not found', taskId)
+      aiScheduler.completeTask(taskId)
+      return
+    }
+    await startChatReply(taskId, colleague, payload)
     return
   }
 
@@ -42,7 +45,73 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
     db.prepare("UPDATE ai_task_queue SET status='processing' WHERE id=?").run(taskId)
     notifyRenderer('ai:task-progress', taskId, 10)
 
-    // 4. Create a git branch for this ticket
+    // 4. Plan phase: skip if already approved or explicitly skipped
+    const skipPlan = payload.skipPlan === true || payload.planApproved === true
+    const feedback = payload.planFeedback as string | undefined
+
+    const planSubmitted = await startPlanningPhase(taskId, ticket, colleague, skipPlan, feedback)
+
+    if (planSubmitted) {
+      // Plan submitted, waiting for human approval
+      // Don't call completeTask — AI stays busy waiting for approval
+      return
+    }
+
+    // 5. Coding phase
+    await startCodingPhase(taskId, ticket, colleague, payload)
+
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    db.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?").run(errorMsg, taskId)
+    notifyRenderer('ai:task-progress', taskId, -1)
+    aiScheduler.completeTask(taskId)
+  }
+}
+
+// Chat reply: AI generates a response and posts it as a channel message
+async function startChatReply(
+  taskId: string,
+  colleague: Record<string, unknown>,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const db = getDatabase()
+  const channelId = payload.channelId as string
+  const message = payload.message as string
+
+  try {
+    const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful assistant.'
+    const response = await callClaude(systemPrompt, message)
+
+    const messageId = randomUUID()
+    db.prepare(
+      'INSERT INTO messages (id, channel_id, sender_id, content) VALUES (?, ?, ?, ?)'
+    ).run(messageId, channelId, colleague.id, response)
+
+    db.prepare("UPDATE ai_task_queue SET status='completed', result=?, completed_at=datetime('now') WHERE id=?")
+      .run(JSON.stringify({ reply: response }), taskId)
+
+    notifyRenderer('ai:task-completed', taskId, JSON.stringify({ reply: response }))
+    aiScheduler.completeTask(taskId)
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    db.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?")
+      .run(errorMsg, taskId)
+    aiScheduler.completeTask(taskId)
+  }
+}
+
+// Coding phase: branch → Claude → commit → PR
+export async function startCodingPhase(
+  taskId: string,
+  ticket: Record<string, unknown>,
+  colleague: Record<string, unknown>,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const db = getDatabase()
+  const ticketId = ticket.id as string
+
+  try {
+    // Create a git branch for this ticket
     const branchName = `ai/${(ticket.title as string).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${ticketId.slice(0, 8)}`
 
     try {
@@ -53,23 +122,22 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
 
     notifyRenderer('ai:task-progress', taskId, 20)
 
-    // 5. Build the Claude prompt
+    // Build the Claude prompt
     const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful software engineer.'
     const userMessage = buildPrompt(ticket, colleague)
 
-    // 6. Call Claude
+    // Call Claude
     const response = await callClaude(systemPrompt, userMessage)
 
     notifyRenderer('ai:task-progress', taskId, 60)
 
-    // 7. Commit the generated code to GitHub
-    // The response should contain a file path and content, or we generate a reasonable commit
+    // Commit the generated code to GitHub
     const filePath = payload.filePath as string || `src/ai-generated/${ticketId.slice(0, 8)}.ts`
     await commitFile(branchName, filePath, response, `AI: ${ticket.title}\n\nCloses #${ticketId.slice(0, 8)}`)
 
     notifyRenderer('ai:task-progress', taskId, 80)
 
-    // 8. Create PR
+    // Create PR
     const pr = await createPullRequest(
       `AI: ${ticket.title}`,
       branchName,
@@ -77,10 +145,10 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
       `Automated PR by ${colleague.name}\n\nTicket: ${ticket.title}\n\n${response.slice(0, 500)}`
     )
 
-    // 9. Update ticket with PR URL
+    // Update ticket with PR URL
     db.prepare('UPDATE tickets SET pr_url = ?, updated_at = datetime(\'now\') WHERE id = ?').run(pr.url, ticketId)
 
-    // 10. Complete the task
+    // Complete the task
     db.prepare("UPDATE ai_task_queue SET status='completed', result=?, completed_at=datetime('now') WHERE id=?").run(
       JSON.stringify({ pr_url: pr.url, pr_number: pr.number }), taskId
     )
@@ -93,7 +161,7 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
     db.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?").run(errorMsg, taskId)
-    notifyRenderer('ai:task-progress', taskId, -1) // -1 means error
+    notifyRenderer('ai:task-progress', taskId, -1)
     aiScheduler.completeTask(taskId)
   }
 }

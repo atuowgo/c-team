@@ -114,14 +114,6 @@ const migrations: Migration[] = [
     `
   },
   {
-    version: 2,
-    name: 'add_ai_task_queue_result_columns',
-    sql: `
-      ALTER TABLE ai_task_queue ADD COLUMN result TEXT;
-      ALTER TABLE ai_task_queue ADD COLUMN completed_at TEXT;
-    `
-  },
-  {
     version: 3,
     name: 'encrypt_sensitive_settings',
     sql: `SELECT 1` // runtime migration in settings-store.ts

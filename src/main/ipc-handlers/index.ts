@@ -2,6 +2,8 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getDatabase } from '../database'
 import { getSetting, setSetting } from '../settings-store'
+import { approvePlan, rejectPlan } from '../planning-phase'
+import { startCodingPhase } from '../programming-session'
 
 export function registerIpcHandlers(): void {
   const db = getDatabase()
@@ -166,6 +168,53 @@ export function registerIpcHandlers(): void {
     }
     db.prepare("UPDATE tickets SET assignee = ?, updated_at = datetime('now') WHERE id = ?").run(colleague.name, id)
     return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id)
+  })
+
+  // --- Ticket Comments ---
+
+  ipcMain.handle('ticket:comment-list', (_e, ticketId: string) => {
+    return db.prepare(
+      'SELECT * FROM ticket_comments WHERE ticket_id = ? ORDER BY created_at'
+    ).all(ticketId)
+  })
+
+  ipcMain.handle('ticket:comment-create', (_e, data: { ticket_id: string; author_id: string; content: string }) => {
+    const id = randomUUID()
+    db.prepare(
+      'INSERT INTO ticket_comments (id, ticket_id, author_id, content) VALUES (?, ?, ?, ?)'
+    ).run(id, data.ticket_id, data.author_id, data.content)
+    return db.prepare('SELECT * FROM ticket_comments WHERE id = ?').get(id)
+  })
+
+  // --- Plan Approval ---
+
+  ipcMain.handle('plan:approve', async (_e, taskId: string) => {
+    const db = getDatabase()
+    const task = db.prepare('SELECT * FROM ai_task_queue WHERE id = ?').get(taskId) as Record<string, unknown> | undefined
+    if (!task) throw new Error(`Task ${taskId} not found`)
+
+    const payload = JSON.parse(task.payload as string)
+    const ticketId = payload.ticketId as string
+    const colleagueId = task.colleague_id as string
+
+    const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId) as Record<string, unknown> | undefined
+    const colleague = db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(colleagueId) as Record<string, unknown> | undefined
+
+    if (!ticket || !colleague) throw new Error('Ticket or colleague not found')
+
+    approvePlan(taskId)
+
+    // Fire and forget: start coding phase
+    startCodingPhase(taskId, ticket, colleague, payload).catch((err) => {
+      console.error('Coding phase failed:', err)
+    })
+
+    return { success: true }
+  })
+
+  ipcMain.handle('plan:reject', (_e, taskId: string, feedback: string) => {
+    rejectPlan(taskId, feedback)
+    return { success: true }
   })
 
   // --- AI Colleagues ---

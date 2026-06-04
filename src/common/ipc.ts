@@ -97,6 +97,20 @@ export interface AiTaskResult {
   completed_at: string | null
 }
 
+export interface TicketCommentData {
+  ticket_id: string
+  author_id: string
+  content: string
+}
+
+export interface TicketCommentResult {
+  id: string
+  ticket_id: string
+  author_id: string
+  content: string
+  created_at: string
+}
+
 // --- IPC event signatures ---
 
 export interface IpcEvents {
@@ -142,6 +156,14 @@ export interface IpcEvents {
   'ai:task-update': (id: string, data: Partial<AiTaskData & { status?: string; result?: string }>) => AiTaskResult
   'ai:task-delete': (id: string) => { success: boolean }
 
+  // Ticket Comments
+  'ticket:comment-list': (ticketId: string) => TicketCommentResult[]
+  'ticket:comment-create': (data: TicketCommentData) => TicketCommentResult
+
+  // Plan Approval
+  'plan:approve': (taskId: string) => { success: boolean }
+  'plan:reject': (taskId: string, feedback: string) => { success: boolean }
+
   // Settings
   'settings:get': (key: string) => unknown
   'settings:set': (key: string, value: unknown) => void
@@ -153,4 +175,7 @@ export interface IpcRendererEvents {
   'ai:task-progress': (taskId: string, progress: number) => void
   'ai:task-assigned': (taskId: string, colleagueId: string) => void
   'ai:task-completed': (taskId: string, result: string) => void
+  'ai:plan-submitted': (taskId: string, ticketId: string, planContent: string) => void
+  'ai:plan-approved': (taskId: string) => void
+  'ai:plan-rejected': (taskId: string) => void
 }
