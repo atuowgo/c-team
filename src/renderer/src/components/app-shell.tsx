@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import type { AiColleagueData } from "@/common/ipc"
+import type { AiColleagueData } from "@common/ipc"
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
   online: { label: "在线", variant: "default" },
@@ -32,8 +32,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.Rea
 
   const fetchColleagues = useCallback(() => {
     window.electron
-      .invoke("ai:list")
-      .then((list: AiColleagueData[]) => setColleagues(list))
+      .invoke<AiColleagueData[]>("ai:list")
+      .then((list) => setColleagues(list))
       .catch(console.error)
   }, [])
 

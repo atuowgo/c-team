@@ -5,7 +5,7 @@ import {
   TicketData,
   TicketResult,
   AiColleagueData,
-} from "@/../../../common/ipc"
+} from "@common/ipc"
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
 import { Button } from "@/components/ui/button"
@@ -97,20 +97,6 @@ export function BoardView() {
   // --- plan review state ---
   const [planTickets, setPlanTickets] = useState<Set<string>>(new Set())
 
-  // Listen for plan events
-  useEffect(() => {
-    const unsub1 = window.electron.on("ai:plan-submitted", (_e: unknown, _taskId: string, ticketId: string) => {
-      setPlanTickets((prev) => new Set(prev).add(ticketId))
-    })
-    const unsub2 = window.electron.on("ai:plan-approved", () => {
-      refreshBoardData()
-    })
-    const unsub3 = window.electron.on("ai:plan-rejected", () => {
-      refreshBoardData()
-    })
-    return () => { unsub1(); unsub2(); unsub3() }
-  }, [refreshBoardData])
-
   // ============================================================
   // data fetching
   // ============================================================
@@ -119,24 +105,23 @@ export function BoardView() {
       const list: BoardData[] = await window.electron.invoke("board:list")
       setBoards(list)
     } catch (e) {
-      addToast("error", `加载看板失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`加载看板失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }, [addToast])
 
   const fetchBoardData = useCallback(async (boardId: string) => {
     setLoading(true)
     try {
-      const [cols, tix, ais]: [ColumnData[], TicketResult[], AiColleagueData[]] =
-        await Promise.all([
-          window.electron.invoke("column:list", boardId),
-          window.electron.invoke("ticket:list", boardId),
-          window.electron.invoke("ai:list"),
-        ])
+      const [cols, tix, ais] = await Promise.all([
+        window.electron.invoke<ColumnData[]>("column:list", boardId),
+        window.electron.invoke<TicketResult[]>("ticket:list", boardId),
+        window.electron.invoke<AiColleagueData[]>("ai:list"),
+      ])
       setColumns(cols)
       setTickets(tix)
       setAiColleagues(ais)
     } catch (e) {
-      addToast("error", `加载看板数据失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`加载看板数据失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     } finally {
       setLoading(false)
     }
@@ -159,6 +144,21 @@ export function BoardView() {
     if (selectedBoardId) fetchBoardData(selectedBoardId)
   }, [selectedBoardId, fetchBoardData])
 
+  // Listen for plan events
+  useEffect(() => {
+    const unsub1 = window.electron.on("ai:plan-submitted", (...args: unknown[]) => {
+      const ticketId = args[2] as string
+      setPlanTickets((prev) => new Set(prev).add(ticketId))
+    })
+    const unsub2 = window.electron.on("ai:plan-approved", () => {
+      refreshBoardData()
+    })
+    const unsub3 = window.electron.on("ai:plan-rejected", () => {
+      refreshBoardData()
+    })
+    return () => { unsub1(); unsub2(); unsub3() }
+  }, [refreshBoardData])
+
   // ============================================================
   // board CRUD
   // ============================================================
@@ -180,7 +180,7 @@ export function BoardView() {
       setCreateBoardCustomColumn("")
       await fetchBoards()
     } catch (e) {
-      addToast("error", `创建看板失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`创建看板失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -190,7 +190,7 @@ export function BoardView() {
       if (selectedBoardId === boardId) setSelectedBoardId(null)
       await fetchBoards()
     } catch (e) {
-      addToast("error", `删除看板失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`删除看板失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -219,7 +219,7 @@ export function BoardView() {
       setAddingColumn(false)
       refreshBoardData()
     } catch (e) {
-      addToast("error", `添加列失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`添加列失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -228,7 +228,7 @@ export function BoardView() {
       await window.electron.invoke("column:delete", columnId)
       refreshBoardData()
     } catch (e) {
-      addToast("error", `删除列失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`删除列失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -247,7 +247,7 @@ export function BoardView() {
       setEditingColumnName("")
       refreshBoardData()
     } catch (e) {
-      addToast("error", `更新列名失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`更新列名失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -305,7 +305,7 @@ export function BoardView() {
       resetTicketForm()
       refreshBoardData()
     } catch (e) {
-      addToast("error", `保存工单失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`保存工单失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -314,7 +314,7 @@ export function BoardView() {
       await window.electron.invoke("ticket:delete", id)
       refreshBoardData()
     } catch (e) {
-      addToast("error", `删除工单失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`删除工单失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -322,10 +322,10 @@ export function BoardView() {
     if (!colleagueId) return
     try {
       await window.electron.invoke("ticket:assign", ticketId, colleagueId)
-      addToast("success", "工单已派发给 AI 同事")
+      addToast("工单已派发给 AI 同事", "success")
       refreshBoardData()
     } catch (e) {
-      addToast("error", `派发失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`派发失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 
@@ -350,7 +350,7 @@ export function BoardView() {
       })
       refreshBoardData()
     } catch (e) {
-      addToast("error", `移动工单失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`移动工单失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }
   }
 

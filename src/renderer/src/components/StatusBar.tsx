@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import type { AiColleagueData } from "@/common/ipc"
+import type { AiColleagueData } from "@common/ipc"
 
 export function StatusBar(): React.ReactElement {
   const [colleagues, setColleagues] = useState<AiColleagueData[]>([])
@@ -8,9 +8,9 @@ export function StatusBar(): React.ReactElement {
 
   useEffect(() => {
     // Fetch colleagues
-    window.electron.invoke("ai:list").then(setColleagues).catch(() => {})
+    window.electron.invoke<AiColleagueData[]>("ai:list").then(setColleagues).catch(() => {})
     const interval = setInterval(() => {
-      window.electron.invoke("ai:list").then(setColleagues).catch(() => {})
+      window.electron.invoke<AiColleagueData[]>("ai:list").then(setColleagues).catch(() => {})
     }, 10000)
     return () => clearInterval(interval)
   }, [])
@@ -29,7 +29,7 @@ export function StatusBar(): React.ReactElement {
       }
     })
     const unsub2 = window.electron.on("ai:status-changed", () => {
-      window.electron.invoke("ai:list").then(setColleagues).catch(() => {})
+      window.electron.invoke<AiColleagueData[]>("ai:list").then(setColleagues).catch(() => {})
     })
     return () => { unsub1(); unsub2() }
   }, [])

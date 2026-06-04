@@ -48,10 +48,11 @@ export function ThemeProvider({
       apply(media)
       media.addEventListener("change", apply)
       return () => media.removeEventListener("change", apply)
+    } else {
+      setResolvedTheme(theme)
+      root.classList.add(theme)
+      return
     }
-
-    setResolvedTheme(theme)
-    root.classList.add(theme)
   }, [theme])
 
   const setTheme = (t: Theme): void => setThemeState(t)

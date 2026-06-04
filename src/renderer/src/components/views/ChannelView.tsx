@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
-import type { ChannelData, MessageData, AiColleagueData } from "@/common/ipc"
+import type { ChannelData, MessageData, AiColleagueData } from "@common/ipc"
 
 function highlightMentions(content: string, colleagueNames: string[]): React.ReactNode[] {
   if (colleagueNames.length === 0) return [content]
@@ -53,31 +53,31 @@ export function ChannelView(): React.ReactElement {
   const loadChannels = useCallback(() => {
     setLoadingChannels(true)
     window.electron
-      .invoke("channel:list")
-      .then((list: ChannelData[]) => setChannels(list))
-      .catch((e) => addToast("error", `加载频道失败: ${e instanceof Error ? e.message : String(e)}`))
+      .invoke<ChannelData[]>("channel:list")
+      .then((list) => setChannels(list))
+      .catch((e) => addToast(`加载频道失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
       .finally(() => setLoadingChannels(false))
   }, [addToast])
 
   useEffect(() => {
     loadChannels()
     window.electron
-      .invoke("ai:list")
-      .then((list: AiColleagueData[]) => setAiColleagues(list))
-      .catch((e) => addToast("error", `加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`))
+      .invoke<AiColleagueData[]>("ai:list")
+      .then((list) => setAiColleagues(list))
+      .catch((e) => addToast(`加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [loadChannels, addToast])
 
   useEffect(() => {
     if (!selectedChannelId) return
     setLoadingMessages(true)
     window.electron
-      .invoke("message:list", selectedChannelId)
-      .then((list: MessageData[]) => {
+      .invoke<MessageData[]>("message:list", selectedChannelId)
+      .then((list) => {
         setMessages(list)
         // scroll to bottom after messages load
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       })
-      .catch((e) => addToast("error", `加载消息失败: ${e instanceof Error ? e.message : String(e)}`))
+      .catch((e) => addToast(`加载消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
       .finally(() => setLoadingMessages(false))
   }, [selectedChannelId, addToast])
 
@@ -100,8 +100,8 @@ export function ChannelView(): React.ReactElement {
         : null
 
       window.electron
-        .invoke("message:send", selectedChannelId, content, "current-user")
-        .then((msg: MessageData) => {
+        .invoke<MessageData>("message:send", selectedChannelId, content, "current-user")
+        .then((msg) => {
           setMessages((prev) => [...prev, msg])
           setInputValue("")
 
@@ -118,10 +118,10 @@ export function ChannelView(): React.ReactElement {
                 },
                 priority: 2,
               })
-              .catch((e) => addToast("error", `创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`))
+              .catch((e) => addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
           }
         })
-        .catch((e) => addToast("error", `发送消息失败: ${e instanceof Error ? e.message : String(e)}`))
+        .catch((e) => addToast(`发送消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
     },
     [inputValue, selectedChannelId, aiColleagues, addToast]
   )
@@ -141,7 +141,7 @@ export function ChannelView(): React.ReactElement {
         setDialogOpen(false)
         loadChannels()
       })
-      .catch((e) => addToast("error", `创建频道失败: ${e instanceof Error ? e.message : String(e)}`))
+      .catch((e) => addToast(`创建频道失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [newChannelName, loadChannels, addToast])
 
   const handleDeleteChannel = useCallback(
@@ -155,7 +155,7 @@ export function ChannelView(): React.ReactElement {
           }
           loadChannels()
         })
-        .catch((e) => addToast("error", `删除频道失败: ${e instanceof Error ? e.message : String(e)}`))
+        .catch((e) => addToast(`删除频道失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
     },
     [selectedChannelId, loadChannels, addToast]
   )

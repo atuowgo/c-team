@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useToastStore } from "@/stores/toast-store"
-import type { AiColleagueData } from "@/common/ipc"
+import type { AiColleagueData } from "@common/ipc"
 
 type TabValue = "api" | "github" | "colleagues"
 
@@ -77,14 +77,14 @@ export function SettingsView(): React.ReactElement {
       window.electron.invoke("settings:get", "ghRepo").then((v) => {
         if (typeof v === "string" && v) setGhRepo(v)
       }),
-    ]).catch((e) => addToast("error", `加载设置失败: ${e instanceof Error ? e.message : String(e)}`))
+    ]).catch((e) => addToast(`加载设置失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [addToast])
 
   const loadColleagues = useCallback(() => {
     setColleaguesLoading(true)
-    window.electron.invoke("ai:list").then((list: AiColleagueData[]) => {
+    window.electron.invoke<AiColleagueData[]>("ai:list").then((list) => {
       setColleagues(list)
-    }).catch((e) => addToast("error", `加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`)).finally(() => setColleaguesLoading(false))
+    }).catch((e) => addToast(`加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => setColleaguesLoading(false))
   }, [addToast])
 
   useEffect(() => {
@@ -101,7 +101,7 @@ export function SettingsView(): React.ReactElement {
     ]).then(() => {
       setApiSaved(true)
       setTimeout(() => setApiSaved(false), 2000)
-    }).catch((e) => addToast("error", `保存API配置失败: ${e instanceof Error ? e.message : String(e)}`)).finally(() => setApiSaving(false))
+    }).catch((e) => addToast(`保存API配置失败: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => setApiSaving(false))
   }, [apiKey, model, maxConcurrency, addToast])
 
   const handleSaveGh = useCallback((e: FormEvent) => {
@@ -117,7 +117,7 @@ export function SettingsView(): React.ReactElement {
       setTimeout(() => setGhSaved(false), 2000)
     }).catch((e) => {
       setGhConnected(false)
-      addToast("error", `保存GitHub配置失败: ${e instanceof Error ? e.message : String(e)}`)
+      addToast(`保存GitHub配置失败: ${e instanceof Error ? e.message : String(e)}`, "error")
     }).finally(() => setGhSaving(false))
   }, [ghToken, ghOwner, ghRepo, addToast])
 
