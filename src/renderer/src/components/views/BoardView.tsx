@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { PlanReviewDialog } from "@/components/PlanReviewDialog"
-import { Plus, Trash2, Pencil, GripHorizontal } from "lucide-react"
+import { Plus, Trash2, Pencil } from "lucide-react"
 
 const priorityLabel: Record<string, string> = {
   low: "低",
@@ -422,7 +422,7 @@ export function BoardView() {
         </div>
         {planTickets.has(ticket.id) && (
           <div className="mt-2">
-            <span className="text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.15)] text-[var(--warning)] border border-[rgba(245,158,11,0.3)]">
+            <span className="text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-[var(--warning-muted)] text-[var(--warning)]">
               方案待审批
             </span>
           </div>
@@ -438,12 +438,12 @@ export function BoardView() {
     return (
       <div
         key={column.id}
-        className="min-w-[280px] max-w-[320px] flex-shrink-0 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] px-3 py-3 flex flex-col"
+        className="min-w-[280px] max-w-[320px] flex-shrink-0 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] flex flex-col"
         onDragOver={handleDragOver}
         onDrop={() => handleDrop(column.id)}
       >
         {/* column header */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="px-4 py-3 flex items-center justify-between">
           {isEditing ? (
             <div className="flex items-center gap-1 flex-1">
               <Input
@@ -503,10 +503,10 @@ export function BoardView() {
           )}
         </div>
 
-        <Separator className="mb-2" />
+        <Separator />
 
         {/* tickets */}
-        <div className="flex-1 space-y-2 overflow-y-auto min-h-0">
+        <div className="px-3 pb-3 space-y-2 flex-1 overflow-y-auto min-h-0">
           {columnTickets.map(renderTicketCard)}
           {columnTickets.length === 0 && (
             <p className="text-[12px] text-[var(--text-muted)] text-center py-8">

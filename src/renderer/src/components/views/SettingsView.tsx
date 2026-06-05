@@ -3,7 +3,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useToastStore } from "@/stores/toast-store"
 import type { AiColleagueData } from "@common/ipc"
@@ -19,15 +18,22 @@ const MODELS = [
 ]
 
 function statusDot(status: string): string {
-  if (status === "idle") return "bg-[var(--success)]"
+  if (status === "online") return "bg-[var(--success)]"
   if (status === "busy") return "bg-[var(--warning)]"
-  return "bg-[var(--text-muted)]"
+  if (status === "idle") return "bg-[var(--text-muted)]"
+  return "border border-[var(--text-muted)]"
 }
 
 function statusLabel(status: string): string {
+  if (status === "online") return "在线"
   if (status === "idle") return "空闲"
   if (status === "busy") return "忙碌"
   return "离线"
+}
+
+function getAvatarClass(name: string): string {
+  const idx = name.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 8
+  return `avatar-gradient-${idx}`
 }
 
 export function SettingsView(): React.ReactElement {
@@ -120,9 +126,10 @@ export function SettingsView(): React.ReactElement {
   }, [ghToken, ghOwner, ghRepo, addToast])
 
   const cardClass =
-    "bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] overflow-hidden"
-  const sectionTitleClass = "text-base font-semibold text-[var(--text-primary)] pb-1"
-  const sectionDescClass = "text-[13px] text-[var(--text-secondary)]"
+    "bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] p-5"
+  const cardTitleClass = "text-sm font-semibold text-[var(--text-primary)]"
+  const cardDescClass = "text-[12px] text-[var(--text-muted)]"
+  const labelClass = "text-[12.5px] font-medium text-[var(--text-secondary)]"
 
   return (
     <div className="flex-1 p-6">
@@ -138,173 +145,159 @@ export function SettingsView(): React.ReactElement {
 
         <TabsContent value="api">
           <div className={cardClass + " max-w-lg"}>
-            <div className="px-5 pt-5 pb-3">
-              <p className={sectionTitleClass}>API 配置</p>
-              <p className={sectionDescClass}>配置 AI 模型的 API Key 和默认模型</p>
-            </div>
-            <div className="px-5 pb-5">
-              <form onSubmit={handleSaveApi} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="api-key">API Key</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="model">默认模型</Label>
-                  <Select value={model} onValueChange={setModel}>
-                    <SelectTrigger id="model">
-                      <SelectValue placeholder="选择模型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MODELS.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="max-concurrency">AI 最大并发数</Label>
-                  <Select value={maxConcurrency} onValueChange={setMaxConcurrency}>
-                    <SelectTrigger id="max-concurrency">
-                      <SelectValue placeholder="选择并发数" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["1", "2", "3", "4", "5"].map((n) => (
-                        <SelectItem key={n} value={n}>
-                          {n}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="submit"
-                    disabled={apiSaving || !apiKey}
-                    className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white h-8.5 text-[13px]"
-                  >
-                    {apiSaving ? "保存中..." : "保存"}
-                  </Button>
-                  {apiSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
-                </div>
-              </form>
-            </div>
+            <p className={cardTitleClass}>API 配置</p>
+            <p className={cardDescClass + " mt-1 mb-4"}>配置 AI 模型的 API Key 和默认模型</p>
+            <form onSubmit={handleSaveApi} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="api-key" className={labelClass}>API Key</Label>
+                <Input
+                  id="api-key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="model" className={labelClass}>默认模型</Label>
+                <Select value={model} onValueChange={setModel}>
+                  <SelectTrigger id="model">
+                    <SelectValue placeholder="选择模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODELS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max-concurrency" className={labelClass}>AI 最大并发数</Label>
+                <Select value={maxConcurrency} onValueChange={setMaxConcurrency}>
+                  <SelectTrigger id="max-concurrency">
+                    <SelectValue placeholder="选择并发数" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["1", "2", "3", "4", "5"].map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  disabled={apiSaving || !apiKey}
+                  className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white"
+                >
+                  {apiSaving ? "保存中..." : "保存"}
+                </Button>
+                {apiSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
+              </div>
+            </form>
           </div>
         </TabsContent>
 
         <TabsContent value="github">
           <div className={cardClass + " max-w-lg"}>
-            <div className="px-5 pt-5 pb-3">
-              <p className={sectionTitleClass}>GitHub 集成</p>
-              <p className={sectionDescClass}>连接 GitHub 仓库以启用自动化 PR 和代码审查</p>
-            </div>
-            <div className="px-5 pb-5">
-              <form onSubmit={handleSaveGh} className="space-y-4">
+            <p className={cardTitleClass}>GitHub 集成</p>
+            <p className={cardDescClass + " mt-1 mb-4"}>连接 GitHub 仓库以启用自动化 PR 和代码审查</p>
+            <form onSubmit={handleSaveGh} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="gh-token" className={labelClass}>GitHub Token</Label>
+                <Input
+                  id="gh-token"
+                  type="password"
+                  value={ghToken}
+                  onChange={(e) => setGhToken(e.target.value)}
+                  placeholder="ghp_..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="gh-token">GitHub Token</Label>
+                  <Label htmlFor="gh-owner" className={labelClass}>Owner</Label>
                   <Input
-                    id="gh-token"
-                    type="password"
-                    value={ghToken}
-                    onChange={(e) => setGhToken(e.target.value)}
-                    placeholder="ghp_..."
+                    id="gh-owner"
+                    value={ghOwner}
+                    onChange={(e) => setGhOwner(e.target.value)}
+                    placeholder="e.g. facebook"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="gh-owner">Owner</Label>
-                    <Input
-                      id="gh-owner"
-                      value={ghOwner}
-                      onChange={(e) => setGhOwner(e.target.value)}
-                      placeholder="e.g. facebook"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="gh-repo">Repo</Label>
-                    <Input
-                      id="gh-repo"
-                      value={ghRepo}
-                      onChange={(e) => setGhRepo(e.target.value)}
-                      placeholder="e.g. react"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gh-repo" className={labelClass}>Repo</Label>
+                  <Input
+                    id="gh-repo"
+                    value={ghRepo}
+                    onChange={(e) => setGhRepo(e.target.value)}
+                    placeholder="e.g. react"
+                  />
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="submit"
-                    disabled={ghSaving || !ghToken}
-                    className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white h-8.5 text-[13px]"
-                  >
-                    {ghSaving ? "保存中..." : "保存并连接"}
-                  </Button>
-                  {ghSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
-                  {ghConnected === true && (
-                    <span className="text-[12px] font-medium text-[var(--success)] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
-                      已连接
-                    </span>
-                  )}
-                  {ghConnected === false && (
-                    <span className="text-[12px] font-medium text-[var(--danger)] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)]" />
-                      连接失败
-                    </span>
-                  )}
-                </div>
-              </form>
-            </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  disabled={ghSaving || !ghToken}
+                  className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white"
+                >
+                  {ghSaving ? "保存中..." : "保存并连接"}
+                </Button>
+                {ghSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
+                {ghConnected === true && (
+                  <span className="text-[12px] font-medium text-[var(--success)] flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
+                    已连接
+                  </span>
+                )}
+                {ghConnected === false && (
+                  <span className="text-[12px] font-medium text-[var(--danger)] flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[var(--danger)]" />
+                    连接失败
+                  </span>
+                )}
+              </div>
+            </form>
           </div>
         </TabsContent>
 
         <TabsContent value="colleagues">
           <div className={cardClass}>
-            <div className="px-5 pt-5 pb-3">
-              <p className={sectionTitleClass}>AI 同事管理</p>
-              <p className={sectionDescClass}>管理团队中的 AI 同事及其状态</p>
-            </div>
-            <div className="px-5 pb-5">
-              {colleaguesLoading ? (
-                <p className="text-[var(--text-muted)] text-sm py-8 text-center">加载中...</p>
-              ) : colleagues.length === 0 ? (
-                <p className="text-[var(--text-muted)] text-sm py-8 text-center">暂无 AI 同事</p>
-              ) : (
-                <div className="space-y-1">
-                  {colleagues.map((c, i) => (
-                    <div key={c.id}>
-                      {i > 0 && <Separator className="my-1" />}
-                      <div className="flex items-center justify-between py-2.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10.5px] px-1.5 py-0.5 rounded font-bold bg-[rgba(168,85,247,0.15)] text-[var(--ai)]">
-                              AI
-                            </span>
-                            <span className="font-medium text-[13px] text-[var(--text-primary)]">{c.name}</span>
-                            <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusDot(c.status)}`} />
-                              {statusLabel(c.status)}
-                            </span>
-                          </div>
-                          <p className="text-[12px] text-[var(--text-secondary)] mt-1">{c.role}</p>
-                          {c.current_task && (
-                            <p className="text-[12px] text-[var(--text-muted)] mt-0.5 truncate">
-                              当前任务: {c.current_task}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+            <p className={cardTitleClass}>AI 同事管理</p>
+            <p className={cardDescClass + " mt-1 mb-4"}>管理团队中的 AI 同事及其状态</p>
+            {colleaguesLoading ? (
+              <p className="text-[var(--text-muted)] text-sm py-8 text-center">加载中...</p>
+            ) : colleagues.length === 0 ? (
+              <p className="text-[var(--text-muted)] text-sm py-8 text-center">暂无 AI 同事</p>
+            ) : (
+              <div>
+                {colleagues.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 py-3">
+                    <div className={`w-8 h-8 rounded-md ${getAvatarClass(c.name)} flex items-center justify-center shrink-0`}>
+                      <span className="text-white text-xs font-semibold">{c.name.charAt(0)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[13px] text-[var(--text-primary)]">{c.name}</span>
+                        <span className="text-[10px] px-1.5 rounded-full bg-[var(--ai-muted)] text-[var(--ai)] font-semibold">AI</span>
+                        <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
+                          <span className={`w-2 h-2 rounded-full ${statusDot(c.status)}`} />
+                          {statusLabel(c.status)}
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{c.role}</p>
+                      {c.current_task && (
+                        <p className="text-[11px] text-[var(--text-muted)] italic truncate mt-0.5">
+                          {c.current_task}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>
