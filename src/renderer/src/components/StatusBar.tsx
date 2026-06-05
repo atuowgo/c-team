@@ -38,9 +38,13 @@ export function StatusBar(): React.ReactElement {
   const busyCount = colleagues.filter(c => c.status === "busy").length
 
   return (
-    <div className="h-7 border-t border-border bg-muted/30 flex items-center px-3 text-xs text-muted-foreground gap-4 shrink-0">
-      <span>{message}</span>
-      <span>AI 同事: {onlineCount}/{colleagues.length} 在线</span>
+    <div className="h-9 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center px-4 text-[11.5px] text-[var(--text-secondary)] gap-3 shrink-0">
+      <span className="flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
+        {message}
+      </span>
+      <span className="w-px h-3.5 bg-[var(--border-default)]" />
+      <span>AI: {onlineCount}/{colleagues.length} 在线</span>
       {busyCount > 0 && <span>{busyCount} 忙碌</span>}
       {Object.entries(taskProgress).filter(([, p]) => p > 0 && p < 100).map(([tid, p]) => (
         <span key={tid}>{tid.slice(0,8)} {p}%</span>

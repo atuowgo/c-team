@@ -10,7 +10,7 @@ const Avatar = React.forwardRef<
   <AvatarPrimitive.Root
     ref={ref}
     className={cn(
-      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
+      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-md",
       className
     )}
     {...props}
@@ -37,7 +37,7 @@ const AvatarFallback = React.forwardRef<
   <AvatarPrimitive.Fallback
     ref={ref}
     className={cn(
-      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+      "flex h-full w-full items-center justify-center rounded-md bg-muted",
       className
     )}
     {...props}
@@ -45,4 +45,17 @@ const AvatarFallback = React.forwardRef<
 ))
 AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
 
-export { Avatar, AvatarImage, AvatarFallback }
+function AvatarGradient({ name, className }: { name: string; className?: string }) {
+  const idx = name.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 8
+  return (
+    <div className={cn(
+      "flex items-center justify-center shrink-0 rounded-md text-white font-semibold",
+      `avatar-gradient-${idx}`,
+      className
+    )}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  )
+}
+
+export { Avatar, AvatarImage, AvatarFallback, AvatarGradient }

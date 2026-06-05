@@ -9,13 +9,6 @@ import {
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -37,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { PlanReviewDialog } from "@/components/PlanReviewDialog"
+import { Plus, Trash2, Pencil, GripHorizontal } from "lucide-react"
 
 const priorityLabel: Record<string, string> = {
   low: "低",
@@ -46,10 +40,10 @@ const priorityLabel: Record<string, string> = {
 }
 
 const priorityClass: Record<string, string> = {
-  low: "bg-secondary text-secondary-foreground",
-  medium: "bg-blue-500 text-white",
-  high: "bg-orange-500 text-white",
-  urgent: "bg-destructive text-destructive-foreground",
+  low: "bg-[var(--bg-hover)] text-[var(--text-muted)]",
+  medium: "bg-[rgba(59,130,246,0.15)] text-[#60a5fa]",
+  high: "bg-[var(--warning-muted)] text-[var(--warning)]",
+  urgent: "bg-[var(--danger-muted)] text-[var(--danger)]",
 }
 
 const DEFAULT_COLUMNS = ["待办", "进行中", "已完成"]
@@ -387,47 +381,53 @@ export function BoardView() {
     }
 
     return (
-      <Card
+      <div
         key={ticket.id}
-        className="cursor-pointer hover:shadow-md transition-shadow"
+        className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] p-3 cursor-pointer hover:border-[var(--text-muted)] transition-colors"
         draggable
         onDragStart={() => handleDragStart(ticket.id)}
         onClick={() => openEditTicket(ticket)}
       >
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm leading-snug">{ticket.title}</CardTitle>
-          {ticket.description && (
-            <CardDescription className="text-xs line-clamp-2 mt-0.5">
-              {ticket.description}
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent className="p-3 pt-1 space-y-1.5">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Badge
-              className={cn(
-                "text-xs px-1.5 py-0",
-                priorityClass[ticket.priority] || priorityClass.medium
-              )}
+        <h3 className="text-[13px] font-medium text-[var(--text-primary)] leading-snug mb-1">
+          {ticket.title}
+        </h3>
+        {ticket.description && (
+          <p className="text-[12px] text-[var(--text-secondary)] line-clamp-2 mb-2">
+            {ticket.description}
+          </p>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span
+            className={cn(
+              "text-[10.5px] px-2 py-0.5 rounded-full font-medium",
+              priorityClass[ticket.priority] || priorityClass.medium
+            )}
+          >
+            {priorityLabel[ticket.priority] || ticket.priority}
+          </span>
+          {labels.map((label, i) => (
+            <span
+              key={i}
+              className="text-[10.5px] px-2 py-0.5 rounded-full font-medium border border-[var(--border-default)] text-[var(--text-secondary)]"
             >
-              {priorityLabel[ticket.priority] || ticket.priority}
-            </Badge>
-            {labels.map((label, i) => (
-              <Badge key={i} variant="outline" className="text-xs px-1.5 py-0">
-                {label}
-              </Badge>
-            ))}
-          </div>
+              {label}
+            </span>
+          ))}
           {ticket.assignee && (
-            <p className="text-xs text-muted-foreground">{ticket.assignee}</p>
+            <span className="text-[var(--ai)] text-[11.5px] font-medium ml-auto flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--ai)]" />
+              {ticket.assignee}
+            </span>
           )}
-          {planTickets.has(ticket.id) && (
-            <Badge variant="secondary" className="text-xs bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+        </div>
+        {planTickets.has(ticket.id) && (
+          <div className="mt-2">
+            <span className="text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.15)] text-[var(--warning)] border border-[rgba(245,158,11,0.3)]">
               方案待审批
-            </Badge>
-          )}
-        </CardContent>
-      </Card>
+            </span>
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -438,7 +438,7 @@ export function BoardView() {
     return (
       <div
         key={column.id}
-        className="min-w-[280px] max-w-[320px] flex-shrink-0 bg-muted/30 rounded-lg p-3 flex flex-col"
+        className="min-w-[280px] max-w-[320px] flex-shrink-0 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] px-3 py-3 flex flex-col"
         onDragOver={handleDragOver}
         onDrop={() => handleDrop(column.id)}
       >
@@ -469,60 +469,34 @@ export function BoardView() {
             <>
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
-                  className="text-sm font-medium truncate cursor-pointer hover:text-primary"
+                  className="text-[13px] font-semibold text-[var(--text-primary)] truncate cursor-pointer hover:text-[var(--accent)]"
                   onClick={() => handleStartEditColumn(column)}
                   title="点击编辑列名"
                 >
                   {column.name}
                 </span>
-                <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--bg-elevated)] text-[var(--text-muted)] font-medium">
                   {columnTickets.length}
-                </Badge>
+                </span>
               </div>
               <div className="flex items-center gap-0.5">
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 w-6 p-0"
+                  className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                   onClick={() => handleStartEditColumn(column)}
                   title="编辑列名"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  </svg>
+                  <Pencil size={12} />
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                  className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--danger)]"
                   onClick={() => handleDeleteColumn(column.id)}
                   title="删除列"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 6h18" />
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  </svg>
+                  <Trash2 size={12} />
                 </Button>
               </div>
             </>
@@ -535,7 +509,7 @@ export function BoardView() {
         <div className="flex-1 space-y-2 overflow-y-auto min-h-0">
           {columnTickets.map(renderTicketCard)}
           {columnTickets.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-4">
+            <p className="text-[12px] text-[var(--text-muted)] text-center py-8">
               拖拽工单到此列
             </p>
           )}
@@ -548,55 +522,43 @@ export function BoardView() {
   // main render
   // ============================================================
   return (
-    <div className="flex flex-col h-full p-4 space-y-3">
+    <div className="flex flex-col h-full p-5 space-y-3">
       {/* ======== Board selector ======== */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 flex-shrink-0">
         {boards.map((board) => (
-          <div key={board.id} className="flex items-center gap-0 flex-shrink-0">
-            <Button
-              variant={selectedBoardId === board.id ? "default" : "outline"}
-              size="sm"
+          <div key={board.id} className="relative group flex-shrink-0">
+            <button
               onClick={() => setSelectedBoardId(board.id)}
-              className="rounded-r-none"
+              className={cn(
+                "px-4 py-1.5 rounded-md text-[12.5px] font-medium transition-colors",
+                selectedBoardId === board.id
+                  ? "bg-[var(--accent)] text-white"
+                  : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              )}
             >
               {board.name}
-            </Button>
-            <Button
-              variant={selectedBoardId === board.id ? "default" : "outline"}
-              size="sm"
-              className="rounded-l-none border-l-0 px-2"
+            </button>
+            <button
+              className={cn(
+                "absolute -top-1 -right-1 p-0.5 rounded-full bg-[var(--bg-elevated)] text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--bg-hover)]",
+                selectedBoardId === board.id && "bg-[var(--accent)] text-white hover:bg-[var(--accent)]"
+              )}
               onClick={() => handleDeleteBoard(board.id)}
               title="删除看板"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-destructive"
-              >
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-              </svg>
-            </Button>
+              <Trash2 size={12} />
+            </button>
           </div>
         ))}
-        <Button
-          variant="outline"
-          size="sm"
+        <button
           onClick={() => setCreateBoardOpen(true)}
-          className="flex-shrink-0"
+          className="flex-shrink-0 px-4 py-1.5 rounded-md text-[12.5px] font-medium border border-dashed border-[var(--border-default)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
         >
-          + 新建看板
-        </Button>
+          <Plus size={14} className="inline mr-1" />
+          新建看板
+        </button>
         {boards.length === 0 && (
-          <p className="text-sm text-muted-foreground">暂无看板，请先创建看板</p>
+          <p className="text-sm text-[var(--text-muted)]">暂无看板，请先创建看板</p>
         )}
       </div>
 
@@ -604,16 +566,21 @@ export function BoardView() {
       {selectedBoardId ? (
         loading ? (
           <div className="flex items-center justify-center flex-1">
-            <p className="text-muted-foreground">加载中...</p>
+            <p className="text-[var(--text-muted)]">加载中...</p>
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
             {/* board toolbar */}
             <div className="flex items-center justify-between flex-shrink-0 mb-3">
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-base font-semibold text-[var(--text-primary)]">
                 {selectedBoard?.name}
               </h2>
-              <Button size="sm" onClick={openCreateTicket}>
+              <Button
+                size="sm"
+                onClick={openCreateTicket}
+                className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white h-8"
+              >
+                <Plus size={14} className="mr-1" />
                 新建工单
               </Button>
             </div>
@@ -621,7 +588,7 @@ export function BoardView() {
             {/* kanban columns */}
             {columns.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 text-center space-y-3">
-                <p className="text-muted-foreground">此看板暂无列，请先创建列</p>
+                <p className="text-[var(--text-muted)]">此看板暂无列，请先创建列</p>
                 <div className="flex items-center gap-2">
                   <Input
                     className="w-40 h-8 text-sm"
@@ -644,7 +611,7 @@ export function BoardView() {
 
                   {/* add column */}
                   {addingColumn ? (
-                    <div className="min-w-[200px] flex-shrink-0 bg-muted/30 rounded-lg p-3 space-y-2">
+                    <div className="min-w-[200px] flex-shrink-0 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] p-3 space-y-2">
                       <Input
                         className="h-8 text-sm"
                         placeholder="输入列名"
@@ -677,14 +644,13 @@ export function BoardView() {
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="min-w-[120px] flex-shrink-0 h-9"
+                    <button
                       onClick={() => setAddingColumn(true)}
+                      className="min-w-[120px] flex-shrink-0 h-9 rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors text-sm flex items-center justify-center gap-1"
                     >
-                      + 添加列
-                    </Button>
+                      <Plus size={14} />
+                      添加列
+                    </button>
                   )}
                 </div>
               </ScrollArea>
@@ -693,7 +659,7 @@ export function BoardView() {
         )
       ) : (
         <div className="flex items-center justify-center flex-1">
-          <p className="text-muted-foreground">选择一个看板以查看工单</p>
+          <p className="text-[var(--text-muted)]">选择一个看板以查看工单</p>
         </div>
       )}
 

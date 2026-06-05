@@ -12,6 +12,8 @@ import {
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
 import type { ChannelData, MessageData, AiColleagueData } from "@common/ipc"
+import { Hash, Plus, X, Send, MessageSquare } from "lucide-react"
+import { AvatarGradient } from "@/components/ui/avatar"
 
 function highlightMentions(content: string, colleagueNames: string[]): React.ReactNode[] {
   if (colleagueNames.length === 0) return [content]
@@ -25,7 +27,7 @@ function highlightMentions(content: string, colleagueNames: string[]): React.Rea
       parts.push(content.slice(lastIdx, match.index))
     }
     parts.push(
-      <span key={match.index} className="text-blue-400 font-medium">
+      <span key={match.index} className="text-[var(--ai)] font-medium">
         {match[1]}
       </span>
     )
@@ -74,14 +76,12 @@ export function ChannelView(): React.ReactElement {
       .invoke<MessageData[]>("message:list", selectedChannelId)
       .then((list) => {
         setMessages(list)
-        // scroll to bottom after messages load
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       })
       .catch((e) => addToast(`加载消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
       .finally(() => setLoadingMessages(false))
   }, [selectedChannelId, addToast])
 
-  // Auto-scroll when messages array changes (new message added)
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
@@ -92,7 +92,6 @@ export function ChannelView(): React.ReactElement {
       const content = inputValue.trim()
       if (!content || !selectedChannelId) return
 
-      // Detect @AI colleague mention
       const mentionPattern = /@(\S+)/
       const mentionMatch = content.match(mentionPattern)
       const mentionedColleague = mentionMatch
@@ -105,7 +104,6 @@ export function ChannelView(): React.ReactElement {
           setMessages((prev) => [...prev, msg])
           setInputValue("")
 
-          // Create AI task if an AI colleague was mentioned
           if (mentionedColleague) {
             window.electron
               .invoke("ai:task-create", {
@@ -165,7 +163,7 @@ export function ChannelView(): React.ReactElement {
   if (loadingChannels) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">加载频道中...</p>
+        <p className="text-[var(--text-secondary)] text-sm">加载频道中...</p>
       </div>
     )
   }
@@ -174,15 +172,17 @@ export function ChannelView(): React.ReactElement {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground text-sm mb-2">暂无频道</p>
-          <p className="text-muted-foreground text-xs">创建一个频道开始协作</p>
+          <MessageSquare className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3" />
+          <p className="text-[var(--text-primary)] text-sm font-medium mb-1">暂无频道</p>
+          <p className="text-[var(--text-muted)] text-xs">创建一个频道开始协作</p>
           <Button
             variant="outline"
             size="sm"
             className="mt-3"
             onClick={() => setDialogOpen(true)}
           >
-            + 新建频道
+            <Plus className="w-4 h-4 mr-1" />
+            新建频道
           </Button>
         </div>
 
@@ -214,18 +214,18 @@ export function ChannelView(): React.ReactElement {
   return (
     <div className="flex-1 flex">
       {/* Channel list */}
-      <div className="w-52 border-r border-border flex flex-col bg-card">
-        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">频道列表</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
+      <div className="w-[220px] border-r border-[var(--border-subtle)] flex flex-col bg-[var(--bg-surface)]">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            频道
+          </span>
+          <button
             onClick={() => setDialogOpen(true)}
+            className="h-6 w-6 flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
             title="新建频道"
           >
-            <span className="text-xs leading-none">+</span>
-          </Button>
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
         <ScrollArea className="flex-1">
           {channels.map((ch) => (
@@ -233,13 +233,14 @@ export function ChannelView(): React.ReactElement {
               <button
                 onClick={() => selectChannel(ch.id)}
                 className={cn(
-                  "flex-1 text-left px-3 py-1.5 text-sm transition-colors",
+                  "flex-1 flex items-center gap-1.5 px-3 py-1.5 mx-2 rounded-md text-[13px] transition-colors",
                   ch.id === selectedChannelId
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/50 text-foreground"
+                    ? "bg-[var(--bg-hover)] text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                 )}
               >
-                # {ch.name}
+                <Hash className="w-[14px] h-[14px] text-[var(--text-muted)] shrink-0" />
+                {ch.name}
               </button>
               <button
                 onClick={(e) => {
@@ -247,14 +248,14 @@ export function ChannelView(): React.ReactElement {
                   handleDeleteChannel(ch.id)
                 }}
                 className={cn(
-                  "shrink-0 w-5 h-5 flex items-center justify-center rounded text-xs",
-                  "text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10",
+                  "shrink-0 flex items-center justify-center rounded",
+                  "text-[var(--text-muted)] hover:text-destructive hover:bg-destructive/10",
                   "opacity-0 group-hover:opacity-100 transition-opacity",
                   "mr-1"
                 )}
                 title="删除频道"
               >
-                x
+                <X className="w-4 h-4" />
               </button>
             </div>
           ))}
@@ -265,41 +266,51 @@ export function ChannelView(): React.ReactElement {
       <div className="flex-1 flex flex-col min-w-0">
         {!selectedChannel ? (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground text-sm">选择一个频道开始聊天</p>
+            <div className="text-center">
+              <MessageSquare className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3" />
+              <p className="text-[var(--text-muted)] text-sm">选择一个频道开始聊天</p>
+            </div>
           </div>
         ) : (
           <>
-            <div className="px-4 py-2 border-b border-border shrink-0">
-              <span className="font-semibold text-sm"># {selectedChannel.name}</span>
+            <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2 shrink-0">
+              <Hash className="w-5 h-5 text-[var(--text-muted)]" />
+              <span className="font-semibold text-[15px] text-[var(--text-primary)]">{selectedChannel.name}</span>
             </div>
 
             <ScrollArea className="flex-1 px-4">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full pt-8">
-                  <p className="text-muted-foreground text-sm">加载消息中...</p>
+                  <p className="text-[var(--text-secondary)] text-sm">加载消息中...</p>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full pt-8">
-                  <p className="text-muted-foreground text-sm">暂无消息，发送第一条消息吧</p>
+                  <div className="text-center">
+                    <MessageSquare className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3" />
+                    <p className="text-[var(--text-muted)] text-sm">暂无消息，发送第一条消息吧</p>
+                  </div>
                 </div>
               ) : (
-                <div className="py-3 space-y-3">
+                <div className="py-3 flex flex-col gap-2">
                   {messages.map((msg) => (
-                    <div key={msg.id} className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-xs font-medium shrink-0">
-                        {msg.sender_id.slice(0, 2).toUpperCase()}
-                      </div>
+                    <div
+                      key={msg.id}
+                      className="flex gap-3 px-2 py-1 -mx-2 rounded-md hover:bg-[var(--bg-hover)]/50 transition-colors group"
+                    >
+                      <AvatarGradient name={msg.sender_id} className="w-9 h-9 text-xs" />
                       <div className="min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-sm font-medium">{msg.sender_id}</span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-[13.5px] font-semibold text-[var(--text-primary)]">
+                            {msg.sender_id}
+                          </span>
+                          <span className="text-[11px] text-[var(--text-muted)]">
                             {new Date(msg.created_at).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
                           </span>
                         </div>
-                        <p className="text-sm text-foreground break-words whitespace-pre-wrap">
+                        <p className="text-[13.5px] leading-relaxed text-[var(--text-primary)] break-words whitespace-pre-wrap">
                           {highlightMentions(msg.content, colleagueNames)}
                         </p>
                       </div>
@@ -310,15 +321,15 @@ export function ChannelView(): React.ReactElement {
               )}
             </ScrollArea>
 
-            <form onSubmit={handleSend} className="px-4 py-2 border-t border-border flex gap-2 shrink-0">
+            <form onSubmit={handleSend} className="px-4 py-3 border-t border-[var(--border-subtle)] flex gap-2 shrink-0">
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="输入消息...  使用 @AI同事名 提及AI同事"
-                className="flex-1"
+                className="flex-1 bg-[var(--bg-elevated)] border-[var(--border-default)] rounded-md focus:border-[var(--accent)]"
               />
               <Button type="submit" size="sm" disabled={!inputValue.trim()}>
-                发送
+                <Send className="w-4 h-4" />
               </Button>
             </form>
           </>

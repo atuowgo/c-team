@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback, type FormEvent } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useToastStore } from "@/stores/toast-store"
 import type { AiColleagueData } from "@common/ipc"
@@ -20,14 +18,14 @@ const MODELS = [
   { value: "gpt-5", label: "GPT-5" },
 ]
 
-function statusVariant(status: string): "default" | "secondary" | "outline" {
-  if (status === "online") return "default"
-  if (status === "busy") return "secondary"
-  return "outline"
+function statusDot(status: string): string {
+  if (status === "idle") return "bg-[var(--success)]"
+  if (status === "busy") return "bg-[var(--warning)]"
+  return "bg-[var(--text-muted)]"
 }
 
 function statusLabel(status: string): string {
-  if (status === "online") return "在线"
+  if (status === "idle") return "空闲"
   if (status === "busy") return "忙碌"
   return "离线"
 }
@@ -121,10 +119,15 @@ export function SettingsView(): React.ReactElement {
     }).finally(() => setGhSaving(false))
   }, [ghToken, ghOwner, ghRepo, addToast])
 
+  const cardClass =
+    "bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-lg)] overflow-hidden"
+  const sectionTitleClass = "text-base font-semibold text-[var(--text-primary)] pb-1"
+  const sectionDescClass = "text-[13px] text-[var(--text-secondary)]"
+
   return (
     <div className="flex-1 p-6">
-      <h1 className="text-2xl font-bold mb-1">设置</h1>
-      <p className="text-muted-foreground text-sm mb-6">配置 API Key、GitHub 集成和管理 AI 同事</p>
+      <h1 className="text-base font-semibold mb-1">设置</h1>
+      <p className="text-[13px] text-[var(--text-secondary)] mb-6">配置 API Key、GitHub 集成和管理 AI 同事</p>
 
       <Tabs value={tab} onValueChange={(v: string) => setTab(v as TabValue)}>
         <TabsList>
@@ -134,12 +137,12 @@ export function SettingsView(): React.ReactElement {
         </TabsList>
 
         <TabsContent value="api">
-          <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle>API 配置</CardTitle>
-              <CardDescription>配置 AI 模型的 API Key 和默认模型</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className={cardClass + " max-w-lg"}>
+            <div className="px-5 pt-5 pb-3">
+              <p className={sectionTitleClass}>API 配置</p>
+              <p className={sectionDescClass}>配置 AI 模型的 API Key 和默认模型</p>
+            </div>
+            <div className="px-5 pb-5">
               <form onSubmit={handleSaveApi} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="api-key">API Key</Label>
@@ -182,23 +185,27 @@ export function SettingsView(): React.ReactElement {
                   </Select>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Button type="submit" disabled={apiSaving || !apiKey}>
+                  <Button
+                    type="submit"
+                    disabled={apiSaving || !apiKey}
+                    className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white h-8.5 text-[13px]"
+                  >
                     {apiSaving ? "保存中..." : "保存"}
                   </Button>
-                  {apiSaved && <span className="text-sm text-green-600">已保存</span>}
+                  {apiSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
                 </div>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="github">
-          <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle>GitHub 集成</CardTitle>
-              <CardDescription>连接 GitHub 仓库以启用自动化 PR 和代码审查</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className={cardClass + " max-w-lg"}>
+            <div className="px-5 pt-5 pb-3">
+              <p className={sectionTitleClass}>GitHub 集成</p>
+              <p className={sectionDescClass}>连接 GitHub 仓库以启用自动化 PR 和代码审查</p>
+            </div>
+            <div className="px-5 pb-5">
               <form onSubmit={handleSaveGh} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="gh-token">GitHub Token</Label>
@@ -231,49 +238,63 @@ export function SettingsView(): React.ReactElement {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Button type="submit" disabled={ghSaving || !ghToken}>
+                  <Button
+                    type="submit"
+                    disabled={ghSaving || !ghToken}
+                    className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white h-8.5 text-[13px]"
+                  >
                     {ghSaving ? "保存中..." : "保存并连接"}
                   </Button>
-                  {ghSaved && <span className="text-sm text-green-600">已保存</span>}
+                  {ghSaved && <span className="text-[13px] text-[var(--success)]">已保存</span>}
                   {ghConnected === true && (
-                    <Badge variant="default">已连接</Badge>
+                    <span className="text-[12px] font-medium text-[var(--success)] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
+                      已连接
+                    </span>
                   )}
                   {ghConnected === false && (
-                    <Badge variant="secondary">连接失败</Badge>
+                    <span className="text-[12px] font-medium text-[var(--danger)] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)]" />
+                      连接失败
+                    </span>
                   )}
                 </div>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="colleagues">
-          <Card>
-            <CardHeader>
-              <CardTitle>AI 同事管理</CardTitle>
-              <CardDescription>管理团队中的 AI 同事及其状态</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className={cardClass}>
+            <div className="px-5 pt-5 pb-3">
+              <p className={sectionTitleClass}>AI 同事管理</p>
+              <p className={sectionDescClass}>管理团队中的 AI 同事及其状态</p>
+            </div>
+            <div className="px-5 pb-5">
               {colleaguesLoading ? (
-                <p className="text-muted-foreground text-sm py-8 text-center">加载中...</p>
+                <p className="text-[var(--text-muted)] text-sm py-8 text-center">加载中...</p>
               ) : colleagues.length === 0 ? (
-                <p className="text-muted-foreground text-sm py-8 text-center">暂无 AI 同事</p>
+                <p className="text-[var(--text-muted)] text-sm py-8 text-center">暂无 AI 同事</p>
               ) : (
                 <div className="space-y-1">
                   {colleagues.map((c, i) => (
                     <div key={c.id}>
                       {i > 0 && <Separator className="my-1" />}
-                      <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center justify-between py-2.5">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{c.name}</span>
-                            <Badge variant={statusVariant(c.status)} className="text-[10px] px-1.5 py-0">
+                            <span className="text-[10.5px] px-1.5 py-0.5 rounded font-bold bg-[rgba(168,85,247,0.15)] text-[var(--ai)]">
+                              AI
+                            </span>
+                            <span className="font-medium text-[13px] text-[var(--text-primary)]">{c.name}</span>
+                            <span className="flex items-center gap-1 text-[12px] text-[var(--text-muted)]">
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusDot(c.status)}`} />
                               {statusLabel(c.status)}
-                            </Badge>
+                            </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{c.role}</p>
+                          <p className="text-[12px] text-[var(--text-secondary)] mt-1">{c.role}</p>
                           {c.current_task && (
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            <p className="text-[12px] text-[var(--text-muted)] mt-0.5 truncate">
                               当前任务: {c.current_task}
                             </p>
                           )}
@@ -283,8 +304,8 @@ export function SettingsView(): React.ReactElement {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

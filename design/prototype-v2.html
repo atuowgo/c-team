@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C-Team Redesign — helio.im 风格原型</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Design Tokens — helio.im inspired
+   ============================================================ */
+:root {
+  --bg-base:        #09090b;
+  --bg-surface:     #111114;
+  --bg-elevated:    #18181b;
+  --bg-hover:       #1f1f24;
+  --bg-active:      #27272a;
+
+  --border-default: #27272a;
+  --border-subtle:  #1f1f24;
+
+  --text-primary:   #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted:     #71717a;
+  --text-inverse:   #09090b;
+
+  --accent:         #ff6b4a;
+  --accent-hover:   #ff8a65;
+  --accent-muted:   rgba(255, 107, 74, 0.12);
+
+  --ai:             #6366f1;
+  --ai-muted:       rgba(99, 102, 241, 0.15);
+
+  --success:        #22c55e;
+  --success-muted:  rgba(34, 197, 94, 0.15);
+  --warning:        #f59e0b;
+  --warning-muted:  rgba(245, 158, 11, 0.15);
+  --danger:         #ef4444;
+  --danger-muted:   rgba(239, 68, 68, 0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  --sidebar-w: 240px;
+  --rightbar-w: 260px;
+  --channel-list-w: 220px;
+  --statusbar-h: 36px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--font-sans); background: var(--bg-base); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-active); }
+
+/* ============================================================
+   App Shell
+   ============================================================ */
+.app { flex: 1; display: flex; overflow: hidden; }
+.sidebar, .rightbar { width: var(--sidebar-w); flex-shrink: 0; display: flex; flex-direction: column; border-color: var(--border-subtle); background: var(--bg-surface); }
+.sidebar { border-right: 1px solid var(--border-subtle); }
+.rightbar { border-left: 1px solid var(--border-subtle); width: var(--rightbar-w); }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Sidebar Header */
+.sidebar-header, .rightbar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+}
+.sidebar-header h2, .rightbar-header h2 { font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em; text-transform: uppercase; }
+
+/* ============================================================
+   Navigation Items
+   ============================================================ */
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; margin: 1px 8px; border-radius: var(--radius-md);
+  font-size: 13.5px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s ease; border: none; background: none;
+  width: calc(100% - 16px); text-align: left;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-item.active { background: var(--accent-muted); color: var(--accent); }
+.nav-item .icon { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.7; }
+.nav-item.active .icon { opacity: 1; }
+.nav-item .badge { margin-left: auto; font-size: 11px; padding: 2px 7px; border-radius: var(--radius-full); background: var(--bg-elevated); color: var(--text-muted); font-weight: 500; }
+
+/* Channel Item */
+.channel-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; margin: 1px 8px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s ease;
+}
+.channel-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.channel-item.active { background: var(--bg-hover); color: var(--text-primary); }
+.channel-item .hash { color: var(--text-muted); font-weight: 400; font-family: var(--font-mono); font-size: 12px; }
+.channel-item .unread { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* ============================================================
+   AI Colleague Card
+   ============================================================ */
+.colleague-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin: 2px 8px; border-radius: var(--radius-md);
+  cursor: pointer; transition: all 0.15s ease;
+}
+.colleague-card:hover { background: var(--bg-hover); }
+.colleague-avatar {
+  width: 32px; height: 32px; border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; flex-shrink: 0;
+  position: relative;
+}
+.colleague-info { min-width: 0; flex: 1; }
+.colleague-name { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.colleague-role { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.colleague-task { font-size: 11px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic; }
+.ai-badge {
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--radius-full);
+  background: var(--ai-muted); color: var(--ai); letter-spacing: 0.03em;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  position: absolute; bottom: -1px; right: -1px;
+  border: 2px solid var(--bg-surface);
+}
+.status-dot.online { background: var(--success); }
+.status-dot.busy { background: var(--warning); }
+.status-dot.idle { background: var(--text-muted); }
+.status-dot.offline { background: transparent; border-color: var(--text-muted); }
+
+/* ============================================================
+   Chat Area
+   ============================================================ */
+.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+}
+.chat-header h3 { font-size: 14px; font-weight: 600; }
+.chat-header .channel-hash { color: var(--text-muted); font-family: var(--font-mono); }
+.chat-tabs { display: flex; gap: 4px; margin-left: 20px; }
+.chat-tab {
+  padding: 4px 12px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 500;
+  color: var(--text-muted); cursor: pointer; transition: all 0.15s ease; border: none; background: none;
+}
+.chat-tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.chat-tab.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+.messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 2px; }
+.msg-group { display: flex; gap: 12px; padding: 6px 0; border-radius: var(--radius-md); transition: background 0.15s; }
+.msg-group:hover { background: var(--bg-hover); }
+.msg-group.first { margin-top: 8px; }
+.msg-avatar {
+  width: 36px; height: 36px; border-radius: var(--radius-md); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; margin-top: 2px;
+}
+.msg-content { min-width: 0; }
+.msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.msg-sender { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.msg-time { font-size: 11px; color: var(--text-muted); }
+.msg-body { font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); }
+.msg-body .mention { color: var(--ai); font-weight: 500; }
+
+.chat-input-bar {
+  padding: 12px 20px; border-top: 1px solid var(--border-subtle); flex-shrink: 0;
+  display: flex; gap: 10px;
+}
+.chat-input {
+  flex: 1; background: var(--bg-elevated); border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); padding: 10px 14px; font-size: 13.5px; color: var(--text-primary);
+  font-family: var(--font-sans); outline: none; transition: border-color 0.15s;
+}
+.chat-input::placeholder { color: var(--text-muted); }
+.chat-input:focus { border-color: var(--accent); }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 16px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s ease; border: none; font-family: var(--font-sans);
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-default); }
+.btn-secondary:hover { background: var(--bg-hover); border-color: var(--bg-active); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-sm); }
+.btn-xs { padding: 3px 8px; font-size: 11px; border-radius: var(--radius-sm); }
+.btn-icon { width: 32px; height: 32px; padding: 0; border-radius: var(--radius-md); }
+.btn-icon-sm { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); }
+.btn-danger { background: var(--danger-muted); color: var(--danger); }
+.btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+/* ============================================================
+   Kanban Board
+   ============================================================ */
+.board-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px; flex-shrink: 0;
+}
+.board-header h2 { font-size: 16px; font-weight: 600; }
+.board-tabs { display: flex; gap: 2px; overflow-x: auto; }
+.board-tab {
+  padding: 6px 14px; font-size: 12.5px; font-weight: 500; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.15s; color: var(--text-muted); border: none; background: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.board-tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.board-tab.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+.board-columns { flex: 1; display: flex; gap: 12px; padding: 0 20px 20px; overflow-x: auto; min-height: 0; }
+.column {
+  min-width: 280px; max-width: 320px; flex-shrink: 0;
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); display: flex; flex-direction: column;
+}
+.column-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; flex-shrink: 0;
+}
+.column-title {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  display: flex; align-items: center; gap: 8px;
+}
+.column-count {
+  font-size: 11px; padding: 1px 7px; border-radius: var(--radius-full);
+  background: var(--bg-elevated); color: var(--text-muted); font-weight: 500;
+}
+.column-cards { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.ticket-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 12px; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ticket-card:hover { border-color: var(--border-default); }
+.ticket-card.dragging { opacity: 0.5; }
+.ticket-title { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; line-height: 1.4; }
+.ticket-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ticket-priority {
+  font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: var(--radius-full);
+}
+.ticket-priority.low { background: var(--bg-hover); color: var(--text-muted); }
+.ticket-priority.medium { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.ticket-priority.high { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.ticket-priority.urgent { background: var(--danger-muted); color: var(--danger); }
+.ticket-label {
+  font-size: 10.5px; padding: 2px 7px; border-radius: var(--radius-full);
+  background: var(--bg-hover); color: var(--text-muted);
+}
+.ticket-assignee { font-size: 11px; color: var(--ai); margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+/* ============================================================
+   Status Bar
+   ============================================================ */
+.statusbar {
+  height: var(--statusbar-h); display: flex; align-items: center; gap: 16px;
+  padding: 0 16px; border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface); font-size: 11.5px; color: var(--text-muted); flex-shrink: 0;
+}
+.statusbar .sep { width: 1px; height: 14px; background: var(--border-default); }
+.statusbar .dot { width: 6px; height: 6px; border-radius: 50%; }
+.statusbar .dot.green { background: var(--success); }
+.statusbar .version { margin-left: auto; }
+
+/* ============================================================
+   Settings
+   ============================================================ */
+.settings { padding: 24px 32px; overflow-y: auto; flex: 1; }
+.settings h2 { font-size: 18px; font-weight: 600; margin-bottom: 24px; }
+.settings-tabs { display: flex; gap: 2px; margin-bottom: 24px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0; }
+.settings-tab {
+  padding: 8px 16px; font-size: 13px; font-weight: 500; color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s; border: none; background: none;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.settings-tab:hover { color: var(--text-secondary); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.settings-card {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px;
+}
+.settings-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+.form-group { margin-bottom: 16px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+.form-input {
+  width: 100%; background: var(--bg-base); border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); padding: 9px 12px; font-size: 13px; color: var(--text-primary);
+  font-family: var(--font-sans); outline: none; transition: border-color 0.15s;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-muted); }
+
+/* ============================================================
+   Empty State
+   ============================================================ */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--text-muted); gap: 8px; padding: 40px;
+}
+.empty-state .icon { width: 48px; height: 48px; opacity: 0.3; margin-bottom: 8px; }
+.empty-state .title { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+.empty-state .desc { font-size: 12.5px; }
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-auto { margin-top: auto; }
+.flex-1 { flex: 1; }
+.min-h-0 { min-height: 0; }
+
+/* ============================================================
+   Logo
+   ============================================================ */
+.logo { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+.logo span { color: var(--accent); }
+
+/* Toggle sidebar button */
+.toggle-btn {
+  position: absolute; top: 14px; z-index: 10;
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; transition: all 0.15s;
+}
+.toggle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.toggle-btn.left { left: 8px; }
+.toggle-btn.right { right: 8px; }
+
+/* Theme toggle */
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; margin: 8px; border-radius: var(--radius-md);
+  font-size: 12px; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.theme-toggle:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+/* Active section indicator */
+.section-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 12px 16px 4px;
+}
+
+/* Add Column Button */
+.add-column-btn {
+  min-width: 160px; flex-shrink: 0; height: fit-content;
+  background: var(--bg-surface); border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg); padding: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.add-column-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: fadeIn 0.2s ease; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     App Shell
+     ============================================================ -->
+<div class="app">
+
+  <!-- ====== Left Sidebar ====== -->
+  <aside class="sidebar" style="position: relative;">
+    <div class="sidebar-header">
+      <div class="logo">C<span>·</span>Team</div>
+    </div>
+
+    <div class="section-label">导航</div>
+    <button class="nav-item active">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      频道
+      <span class="badge">3</span>
+    </button>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      看板
+    </button>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      设置
+    </button>
+
+    <div class="section-label">频道</div>
+    <div style="overflow-y: auto; flex: 1; min-height: 0;">
+      <div class="channel-item active">
+        <span class="hash">#</span> backend-v2
+        <span class="unread"></span>
+      </div>
+      <div class="channel-item">
+        <span class="hash">#</span> incidents
+      </div>
+      <div class="channel-item">
+        <span class="hash">#</span> infra
+      </div>
+    </div>
+
+    <button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      主题
+    </button>
+  </aside>
+
+  <!-- ====== Main Content ====== -->
+  <main class="main">
+
+    <!-- ====== Channel View (Active) ====== -->
+    <div style="flex: 1; display: flex; min-height: 0;">
+      <!-- Channel List -->
+      <div style="width: var(--channel-list-w); flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border-subtle); background: var(--bg-surface);">
+        <div class="sidebar-header" style="padding: 12px 16px;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">频道列表</span>
+          <button class="btn btn-icon-sm btn-ghost" title="新建频道">+</button>
+        </div>
+        <div style="overflow-y: auto; flex: 1; min-height: 0; padding: 4px 0;">
+          <div class="channel-item active">
+            <span class="hash">#</span> backend-v2
+            <span class="unread"></span>
+          </div>
+          <div class="channel-item"><span class="hash">#</span> incidents</div>
+          <div class="channel-item"><span class="hash">#</span> infra</div>
+        </div>
+      </div>
+
+      <!-- Chat Area -->
+      <div class="chat-area">
+        <div class="chat-header">
+          <span class="channel-hash">#</span>
+          <h3>backend-v2</h3>
+          <div class="chat-tabs">
+            <button class="chat-tab active">聊天</button>
+            <button class="chat-tab">文件</button>
+            <button class="chat-tab">已置顶</button>
+          </div>
+        </div>
+
+        <div class="messages">
+          <!-- Ada (AI) -->
+          <div class="msg-group first">
+            <div class="msg-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;">A</div>
+            <div class="msg-content">
+              <div class="msg-header">
+                <span class="msg-sender">Ada</span>
+                <span class="ai-badge">AI</span>
+                <span class="msg-time">09:03</span>
+              </div>
+              <div class="msg-body">Hi team! I've completed the database migration plan for backend-v2. The initial analysis shows we need to handle 3 major schema changes.</div>
+            </div>
+          </div>
+
+          <!-- You -->
+          <div class="msg-group">
+            <div class="msg-avatar" style="background: linear-gradient(135deg, #ff6b4a, #ff8a65); color: white;">Y</div>
+            <div class="msg-content">
+              <div class="msg-header">
+                <span class="msg-sender">You</span>
+                <span class="msg-time">09:04</span>
+              </div>
+              <div class="msg-body">Great, can you share the details? <span class="mention">@Ada</span> also, what's the estimated timeline?</div>
+            </div>
+          </div>
+
+          <!-- Ada (AI) reply -->
+          <div class="msg-group">
+            <div class="msg-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;">A</div>
+            <div class="msg-content">
+              <div class="msg-header">
+                <span class="msg-sender">Ada</span>
+                <span class="ai-badge">AI</span>
+                <span class="msg-time">09:04</span>
+              </div>
+              <div class="msg-body">Here's the breakdown:<br><br>1. <strong>User table</strong> — add role enum and avatar_url fields<br>2. <strong>Project table</strong> — add status tracking with audit log<br>3. <strong>API keys</strong> — migrate to encrypted storage<br><br>Estimated 3-4 hours for the full migration script. I'll create a ticket on the board.</div>
+            </div>
+          </div>
+
+          <!-- Hopper (AI) -->
+          <div class="msg-group">
+            <div class="msg-avatar" style="background: linear-gradient(135deg, #22c55e, #10b981); color: white;">H</div>
+            <div class="msg-content">
+              <div class="msg-header">
+                <span class="msg-sender">Hopper</span>
+                <span class="ai-badge">AI</span>
+                <span class="msg-time">09:05</span>
+              </div>
+              <div class="msg-body">I can help with the API key encryption part — I've been working on the <span class="mention">@SafeStorage</span> module. Let me pair with <span class="mention">@Ada</span> on this.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-bar">
+          <input class="chat-input" placeholder="输入消息... 使用 @AI同事名 提及AI同事" value="">
+          <button class="btn btn-primary">发送</button>
+        </div>
+      </div>
+
+      <!-- ====== Board Mini-Panel (right side of chat) ====== -->
+      <div style="width: 320px; flex-shrink: 0; border-left: 1px solid var(--border-subtle); background: var(--bg-surface); display: flex; flex-direction: column; overflow: hidden;">
+        <div class="sidebar-header" style="padding: 12px 16px;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">相关工单</span>
+          <button class="btn btn-xs btn-secondary">查看全部</button>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="ticket-card">
+            <div class="ticket-title">HEL-402 数据库迁移脚本编写</div>
+            <div class="ticket-meta">
+              <span class="ticket-priority high">高</span>
+              <span class="ticket-label">backend</span>
+              <span class="ticket-assignee">A</span>
+            </div>
+          </div>
+          <div class="ticket-card">
+            <div class="ticket-title">HEL-403 API密钥加密迁移</div>
+            <div class="ticket-meta">
+              <span class="ticket-priority medium">中</span>
+              <span class="ticket-label">security</span>
+              <span class="ticket-assignee">H</span>
+            </div>
+          </div>
+          <div class="ticket-card">
+            <div class="ticket-title">HEL-404 用户表 Schema 更新</div>
+            <div class="ticket-meta">
+              <span class="ticket-priority medium">中</span>
+              <span class="ticket-label">database</span>
+              <span class="ticket-assignee">A</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== StatusBar ====== -->
+    <div class="statusbar">
+      <span class="dot green"></span>
+      <span>就绪</span>
+      <span class="sep"></span>
+      <span>AI 同事: 3/4 在线</span>
+      <span class="sep"></span>
+      <span>1 忙碌</span>
+      <span class="version">C-Team v0.2.0</span>
+    </div>
+  </main>
+
+  <!-- ====== Right Sidebar — AI Colleagues ====== -->
+  <aside class="rightbar">
+    <div class="rightbar-header">
+      <h2>AI 同事</h2>
+    </div>
+
+    <div style="overflow-y: auto; flex: 1; min-height: 0; padding: 4px 0;">
+      <!-- Ada -->
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; position: relative;">
+          A
+          <span class="status-dot online"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Ada <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">后端架构师</div>
+          <div class="colleague-task">编写数据库迁移脚本...</div>
+        </div>
+      </div>
+
+      <!-- Hopper -->
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #22c55e, #10b981); color: white; position: relative;">
+          H
+          <span class="status-dot busy"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Hopper <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">安全工程师</div>
+          <div class="colleague-task">API密钥加密迁移...</div>
+        </div>
+      </div>
+
+      <!-- Sam -->
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); color: white; position: relative;">
+          S
+          <span class="status-dot idle"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Sam <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">前端开发</div>
+          <div class="colleague-task">无当前任务</div>
+        </div>
+      </div>
+
+      <!-- Ray -->
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6); color: white; position: relative;">
+          R
+          <span class="status-dot offline"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Ray <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">DevOps 工程师</div>
+          <div class="colleague-task">离线</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- /app -->
+
+<!-- ============================================================
+     Board View (hidden by default, toggle via JS)
+     ============================================================ -->
+<div class="app" id="board-view" style="display: none;">
+  <aside class="sidebar" style="position: relative;">
+    <div class="sidebar-header"><div class="logo">C<span>·</span>Team</div></div>
+    <div class="section-label">导航</div>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      频道
+    </button>
+    <button class="nav-item active">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      看板
+    </button>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      设置
+    </button>
+    <div class="section-label">频道</div>
+    <div class="channel-item"><span class="hash">#</span> backend-v2</div>
+    <div class="channel-item"><span class="hash">#</span> incidents</div>
+    <div class="channel-item"><span class="hash">#</span> infra</div>
+    <button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      主题
+    </button>
+  </aside>
+
+  <main class="main">
+    <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+      <!-- Board Header -->
+      <div class="board-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <h2>Backend Sprint</h2>
+          <div class="board-tabs">
+            <button class="board-tab active">Backend Sprint</button>
+            <button class="board-tab">Frontend MVP</button>
+            <button class="board-tab">+ 新建看板</button>
+          </div>
+        </div>
+        <button class="btn btn-primary">新建工单</button>
+      </div>
+
+      <!-- Kanban Columns -->
+      <div class="board-columns">
+        <!-- To Do -->
+        <div class="column">
+          <div class="column-header">
+            <span class="column-title">待办 <span class="column-count">2</span></span>
+            <button class="btn btn-icon-sm btn-ghost" style="font-size: 14px;">+</button>
+          </div>
+          <div class="column-cards">
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-405 添加日志聚合功能</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority low">低</span>
+                <span class="ticket-label">logging</span>
+              </div>
+            </div>
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-406 编写单元测试覆盖核心模块</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority medium">中</span>
+                <span class="ticket-label">testing</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- In Progress -->
+        <div class="column">
+          <div class="column-header">
+            <span class="column-title">进行中 <span class="column-count">3</span></span>
+            <button class="btn btn-icon-sm btn-ghost" style="font-size: 14px;">+</button>
+          </div>
+          <div class="column-cards">
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-402 数据库迁移脚本编写</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority high">高</span>
+                <span class="ticket-label">backend</span>
+                <span class="ticket-assignee">
+                  <span style="width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: white;">A</span>
+                  Ada
+                </span>
+              </div>
+            </div>
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-403 API密钥加密迁移</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority medium">中</span>
+                <span class="ticket-label">security</span>
+                <span class="ticket-assignee">
+                  <span style="width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg, #22c55e, #10b981); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: white;">H</span>
+                  Hopper
+                </span>
+              </div>
+            </div>
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-404 用户表 Schema 更新</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority medium">中</span>
+                <span class="ticket-label">database</span>
+                <span class="ticket-assignee">
+                  <span style="width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: white;">A</span>
+                  Ada
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- In Review -->
+        <div class="column">
+          <div class="column-header">
+            <span class="column-title">审核中 <span class="column-count">1</span></span>
+          </div>
+          <div class="column-cards">
+            <div class="ticket-card">
+              <div class="ticket-title">HEL-401 重构认证中间件</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority urgent">紧急</span>
+                <span class="ticket-label">auth</span>
+                <span class="ticket-label" style="background: rgba(245,158,11,0.15); color: #fbbf24;">方案待审批</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Done -->
+        <div class="column">
+          <div class="column-header">
+            <span class="column-title">已完成 <span class="column-count">4</span></span>
+          </div>
+          <div class="column-cards">
+            <div class="ticket-card" style="opacity: 0.6;">
+              <div class="ticket-title">HEL-400 项目初始化与 CI 配置</div>
+              <div class="ticket-meta">
+                <span class="ticket-priority low">低</span>
+                <span class="ticket-label">devops</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Column -->
+        <div class="add-column-btn">+ 添加列</div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="dot green"></span>
+      <span>就绪</span>
+      <span class="sep"></span>
+      <span>AI 同事: 3/4 在线</span>
+      <span class="sep"></span>
+      <span>1 忙碌</span>
+      <span class="version">C-Team v0.2.0</span>
+    </div>
+  </main>
+
+  <aside class="rightbar">
+    <div class="rightbar-header"><h2>AI 同事</h2></div>
+    <div style="overflow-y: auto; flex: 1; padding: 4px 0;">
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; position: relative;">
+          A<span class="status-dot online"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Ada <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">后端架构师</div>
+          <div class="colleague-task">编写数据库迁移脚本...</div>
+        </div>
+      </div>
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #22c55e, #10b981); color: white; position: relative;">
+          H<span class="status-dot busy"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Hopper <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">安全工程师</div>
+          <div class="colleague-task">API密钥加密迁移...</div>
+        </div>
+      </div>
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); color: white; position: relative;">
+          S<span class="status-dot idle"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Sam <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">前端开发</div>
+        </div>
+      </div>
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6); color: white; position: relative;">
+          R<span class="status-dot offline"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Ray <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">DevOps 工程师</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ============================================================
+     Settings View (hidden by default)
+     ============================================================ -->
+<div class="app" id="settings-view" style="display: none;">
+  <aside class="sidebar" style="position: relative;">
+    <div class="sidebar-header"><div class="logo">C<span>·</span>Team</div></div>
+    <div class="section-label">导航</div>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      频道
+    </button>
+    <button class="nav-item">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      看板
+    </button>
+    <button class="nav-item active">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      设置
+    </button>
+    <button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      主题
+    </button>
+  </aside>
+
+  <main class="main">
+    <div class="settings">
+      <h2>设置</h2>
+      <div class="settings-tabs">
+        <button class="settings-tab active">API 配置</button>
+        <button class="settings-tab">GitHub 集成</button>
+        <button class="settings-tab">AI 同事管理</button>
+      </div>
+
+      <div class="settings-card">
+        <h3>API 配置</h3>
+        <div class="form-group">
+          <label class="form-label">API Key</label>
+          <input class="form-input" type="password" value="sk-ant-••••••••••••••••" placeholder="输入 Anthropic API Key">
+        </div>
+        <div class="form-group">
+          <label class="form-label">模型</label>
+          <input class="form-input" value="claude-sonnet-4-20250514" placeholder="模型名称">
+        </div>
+        <div class="form-group" style="display: flex; justify-content: flex-end;">
+          <button class="btn btn-primary">保存</button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <h3>AI 同事并发</h3>
+        <div class="form-group">
+          <label class="form-label">最大并发数</label>
+          <input class="form-input" type="number" value="4" placeholder="1-10" style="width: 120px;">
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="dot green"></span>
+      <span>就绪</span>
+      <span class="sep"></span>
+      <span>AI 同事: 3/4 在线</span>
+      <span class="version">C-Team v0.2.0</span>
+    </div>
+  </main>
+
+  <aside class="rightbar">
+    <div class="rightbar-header"><h2>AI 同事</h2></div>
+    <div style="overflow-y: auto; flex: 1; padding: 4px 0;">
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; position: relative;">
+          A<span class="status-dot online"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Ada <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">后端架构师</div>
+        </div>
+      </div>
+      <div class="colleague-card">
+        <div class="colleague-avatar" style="background: linear-gradient(135deg, #22c55e, #10b981); color: white; position: relative;">
+          H<span class="status-dot busy"></span>
+        </div>
+        <div class="colleague-info">
+          <div class="colleague-name">Hopper <span class="ai-badge">AI</span></div>
+          <div class="colleague-role">安全工程师</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ============================================================
+     View Switcher (prototype navigation)
+     ============================================================ -->
+<div style="position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 4px; z-index: 100;">
+  <button class="btn btn-sm btn-secondary" onclick="showView('channel')" id="nav-channel" style="background: var(--bg-active);">频道视图</button>
+  <button class="btn btn-sm btn-secondary" onclick="showView('board')" id="nav-board">看板视图</button>
+  <button class="btn btn-sm btn-secondary" onclick="showView('settings')" id="nav-settings">设置视图</button>
+</div>
+
+<script>
+function showView(view) {
+  document.querySelectorAll('.app').forEach(el => el.style.display = 'none');
+  document.getElementById(view + '-view') && (document.getElementById(view + '-view').style.display = 'flex');
+  // If showing channel view, show the first app (channel is default)
+  if (view === 'channel') document.querySelector('.app').style.display = 'flex';
+
+  document.querySelectorAll('#nav-channel, #nav-board, #nav-settings').forEach(b => b.style.background = '');
+  document.getElementById('nav-' + view).style.background = 'var(--bg-active)';
+}
+</script>
+
+</body>
+</html>
