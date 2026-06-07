@@ -20,6 +20,44 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
   const ticketId = payload.ticketId as string | undefined
 
   if (!ticketId) {
+    // system-manager is handled separately — reads config from ai_roles
+    if (colleagueId === 'system-manager') {
+      const role = db.prepare("SELECT * FROM ai_roles WHERE id = 'system-manager'").get() as Record<string, unknown> | undefined
+      if (!role) {
+        db.prepare("UPDATE ai_task_queue SET status='failed', result=? WHERE id=?").run('system-manager role not found', taskId)
+        aiScheduler.completeTask(taskId)
+        return
+      }
+      const channelId = payload.channelId as string | undefined
+      let teamInfo = ''
+      if (channelId) {
+        const members = db.prepare(
+          `SELECT c.name, c.nickname, r.name as role_name, c.personal_notes
+           FROM channel_members cm
+           JOIN ai_colleagues c ON cm.colleague_id = c.id
+           LEFT JOIN ai_roles r ON c.role_id = r.id
+           WHERE cm.channel_id = ? AND cm.colleague_id != 'system-manager'`
+        ).all(channelId) as Array<{ name: string; nickname: string | null; role_name: string; personal_notes: string | null }>
+        if (members.length > 0) {
+          teamInfo = '\n\n你的团队成员：\n' + members.map((m) => {
+            const displayName = m.nickname || m.name
+            const notes = m.personal_notes ? `，${m.personal_notes}` : ''
+            return `- @${displayName}（${m.role_name}${notes}）`
+          }).join('\n') + '\n需要分配任务时，@对应成员即可。'
+        }
+      }
+      const managerColleague = {
+        id: 'system-manager',
+        name: '频道管理员',
+        nickname: null,
+        system_prompt: (role.system_prompt as string) + teamInfo,
+        model: null,
+        type: 'manager',
+      }
+      await startChatReply(taskId, managerColleague, payload)
+      return
+    }
+
     // Chat mention — generate a reply and post it as a message
     const colleague = db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(colleagueId) as Record<string, unknown> | undefined
     if (!colleague) {
