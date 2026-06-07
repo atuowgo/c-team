@@ -87,7 +87,7 @@ async function startChatReply(
     const messageId = randomUUID()
     db.prepare(
       'INSERT INTO messages (id, channel_id, sender_id, content) VALUES (?, ?, ?, ?)'
-    ).run(messageId, channelId, colleague.id, response)
+    ).run(messageId, channelId, (colleague.nickname as string | null) || (colleague.name as string), response)
 
     db.prepare("UPDATE ai_task_queue SET status='completed', result=?, completed_at=datetime('now') WHERE id=?")
       .run(JSON.stringify({ reply: response }), taskId)
