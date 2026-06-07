@@ -4,7 +4,7 @@ import { callClaude } from './claude-api'
 import { createBranch, commitFile, createPullRequest } from './github-api'
 import { aiScheduler } from './ai-scheduler'
 import { startPlanningPhase } from './planning-phase'
-import { processMemoryJobs } from './memory-manager'
+import { processMemoryJobs, assembleContext } from './memory-manager'
 import { BrowserWindow } from 'electron'
 
 // Main entry point: called when a task is assigned to a colleague
@@ -126,9 +126,11 @@ async function startChatReply(
 
   try {
     const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful assistant.'
+    const context = assembleContext(colleagueId, channelId, null)
+    const messages = [...context, { role: 'user' as const, content: message }]
     let response: string
     try {
-      response = await callClaude(systemPrompt, message, {
+      response = await callClaude(systemPrompt, messages, {
         modelOverride: (colleague.model as string | null) || undefined,
       })
     } catch (err) {
