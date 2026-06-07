@@ -20,7 +20,10 @@ export async function startPlanningPhase(
   const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful software engineer.'
   const planPrompt = buildPlanPrompt(ticket, colleague, previousFeedback)
 
-  const planContent = await callClaude(systemPrompt, planPrompt, { maxTokens: 2048 })
+  const planContent = await callClaude(systemPrompt, planPrompt, {
+    maxTokens: 2048,
+    modelOverride: (colleague.model as string | null) || undefined,
+  })
 
   // Save plan as ticket comment
   const commentId = randomUUID()

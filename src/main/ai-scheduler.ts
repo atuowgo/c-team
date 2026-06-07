@@ -50,10 +50,14 @@ class AiScheduler {
     const taskId = task.id as string
 
     // Find an idle AI colleague capable of handling this event_type
-    // For now: find first idle colleague
-    const colleague = db.prepare(
-      `SELECT * FROM ai_colleagues WHERE status = 'idle' LIMIT 1`
-    ).get() as Record<string, unknown> | undefined
+    // Try pre-assigned colleague first (from @mention), then fall back to any idle colleague
+    const preAssignedId = task.colleague_id as string | null
+    let colleague = preAssignedId
+      ? db.prepare("SELECT * FROM ai_colleagues WHERE id = ? AND status = 'idle'").get(preAssignedId) as Record<string, unknown> | undefined
+      : undefined
+    if (!colleague) {
+      colleague = db.prepare("SELECT * FROM ai_colleagues WHERE status = 'idle' LIMIT 1").get() as Record<string, unknown> | undefined
+    }
 
     if (!colleague) {
       // No idle colleagues — leave task pending

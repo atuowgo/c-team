@@ -4,6 +4,7 @@ import { getDatabase } from '../database'
 import { getSetting, setSetting } from '../settings-store'
 import { approvePlan, rejectPlan } from '../planning-phase'
 import { startCodingPhase } from '../programming-session'
+import type { ModelEntry } from '../../common/ipc'
 
 export function registerIpcHandlers(): void {
   const db = getDatabase()
@@ -227,10 +228,10 @@ export function registerIpcHandlers(): void {
     return db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(id) ?? null
   })
 
-  ipcMain.handle('ai:create', (_e, data: { name: string; role: string; system_prompt: string; capabilities?: string[] }) => {
+  ipcMain.handle('ai:create', (_e, data: { name: string; role: string; system_prompt: string; capabilities?: string[]; model?: string | null; nickname?: string | null }) => {
     const id = randomUUID()
     const capabilities = data.capabilities ? JSON.stringify(data.capabilities) : '[]'
-    db.prepare('INSERT INTO ai_colleagues (id, name, role, system_prompt, capabilities, status) VALUES (?, ?, ?, ?, ?, ?)').run(id, data.name, data.role, data.system_prompt, capabilities, 'idle')
+    db.prepare('INSERT INTO ai_colleagues (id, name, role, system_prompt, capabilities, status, model, nickname) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.name, data.role, data.system_prompt, capabilities, 'idle', data.model ?? null, data.nickname ?? null)
     return db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(id)
   })
 
@@ -328,5 +329,28 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
     setSetting(key, value)
+  })
+
+  // --- Models ---
+
+  ipcMain.handle('models:list', () => {
+    return (getSetting('customModels') as ModelEntry[] | null) || []
+  })
+
+  ipcMain.handle('models:add', (_e, id: string, label: string) => {
+    const custom = (getSetting('customModels') as ModelEntry[] | null) || []
+    if (!custom.find((m) => m.id === id)) {
+      const updated = [...custom, { id, label: label || id }]
+      setSetting('customModels', updated)
+      return updated
+    }
+    return custom
+  })
+
+  ipcMain.handle('models:remove', (_e, id: string) => {
+    const custom = (getSetting('customModels') as ModelEntry[] | null) || []
+    const updated = custom.filter((m) => m.id !== id)
+    setSetting('customModels', updated)
+    return updated
   })
 }

@@ -17,3 +17,28 @@
    | 环境配置要点 | CLAUDE.md | "Windows 开发须先安装 Node.js 18+（建议 fnm/Volta 管理版本）" |
    | 构建铁律 | CLAUDE.md | "better-sqlite3 必须通过 @electron/rebuild 重新编译，pnpm rebuild 不够（ABI 不匹配 Electron 内置 Node.js）" |
    | 版本兼容性矩阵 | RULE.md 引用 | 各依赖的版本兼容性详表及踩坑记录 |
+
+## 环境启动铁律
+
+- **首次启动必须用国内镜像下载 Electron 二进制**：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" node node_modules/.pnpm/electron@<ver>/node_modules/electron/install.js`，默认 GitHub 源在国内超时
+- **pnpm install 会跳过 Electron 下载**（ELECTRON_SKIP_BINARY_DOWNLOAD=1），安装完后需手动补下载或直接 `unzip` 缓存 zip 到 `dist/` 目录
+- **path.txt 必须用 `printf` 写入**（不能用 `echo`），`echo` 会附加换行符导致 electron-vite spawn 路径带 `\n` 报错
+- **better-sqlite3 必须通过 `node_modules/.bin/electron-rebuild -f -w better-sqlite3` 重新编译**，pnpm rebuild 不够（ABI 不匹配 Electron 内置 Node.js）
+- **开发启动命令**：`node_modules/.bin/electron-vite dev`（不要用 pnpm dev，RTK hook 会拦截）
+
+## CDP 前端自动化验证铁律
+
+- **Electron CDP 启动**：必须加 `--remote-debugging-port=9222 --remote-allow-origins='*'`，缺 `--remote-allow-origins` 会报 403 Forbidden WebSocket 握手失败
+- **验证前必须重新构建**：源码改动后需 `node_modules/.bin/electron-vite build --outDir out` 再重启，否则 CDP 连到的是旧构建，无法验证新功能
+- **CDP 只能返回原始值，不能返回 DOM 元素**：`Runtime.evaluate` 加 `returnByValue: true` 时，返回 DOM 元素对象会得到 `null`；改用返回布尔/字符串/数字：`document.querySelector('input') !== null`
+- **无 `type` 属性的 input 不匹配 `input[type=text]`**：shadcn Input 渲染时不设置 `type`，必须用 `document.querySelector('input')` 而非 `input[type=text]`
+- **React 受控组件必须用 nativeInputValueSetter 触发 onChange**：`Input.insertText` 只更新 DOM 值，不更新 React state；正确做法：
+  ```js
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(inp, '文本内容');
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  ```
+- **表单提交用 `form.requestSubmit()`**：CDP key dispatch（Enter）不触发 React onSubmit；正确：`document.querySelector('form').requestSubmit()`
+- **Quartz CGEventPost 合成点击被 macOS 安全机制拦截**：无障碍授权的 app 才能用，普通脚本无效，改用 CDP WebSocket 方案
+
+@RULE.md

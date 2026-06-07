@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
+import { useState, useEffect, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -47,10 +47,13 @@ export function ChannelView(): React.ReactElement {
   const [loadingChannels, setLoadingChannels] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [aiColleagues, setAiColleagues] = useState<AiColleagueData[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newChannelName, setNewChannelName] = useState("")
   const addToast = useToastStore((s) => s.addToast)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const loadChannels = useCallback(() => {
     setLoadingChannels(true)
@@ -69,22 +72,72 @@ export function ChannelView(): React.ReactElement {
       .catch((e) => addToast(`加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [loadChannels, addToast])
 
-  useEffect(() => {
-    if (!selectedChannelId) return
+  const loadMessages = useCallback((channelId: string) => {
     setLoadingMessages(true)
     window.electron
-      .invoke<MessageData[]>("message:list", selectedChannelId)
+      .invoke<MessageData[]>("message:list", channelId)
       .then((list) => {
         setMessages(list)
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       })
       .catch((e) => addToast(`加载消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
       .finally(() => setLoadingMessages(false))
-  }, [selectedChannelId, addToast])
+  }, [addToast])
+
+  useEffect(() => {
+    if (!selectedChannelId) return
+    loadMessages(selectedChannelId)
+  }, [selectedChannelId, loadMessages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  useEffect(() => {
+    const unsubscribe = window.electron.on("ai:task-completed", () => {
+      if (selectedChannelId) loadMessages(selectedChannelId)
+    })
+    return unsubscribe
+  }, [selectedChannelId, loadMessages])
+
+  const updateMentionQuery = useCallback((value: string) => {
+    const match = value.match(/(?:^|\s)@([^\s@]*)$/)
+    setMentionQuery(match ? match[1] : null)
+    setSelectedMentionIndex(0)
+  }, [])
+
+  const getColleagueMentionName = useCallback((colleague: AiColleagueData) => {
+    return colleague.nickname || colleague.name
+  }, [])
+
+  const mentionOptions = mentionQuery === null
+    ? []
+    : aiColleagues.filter((colleague) => {
+        const query = mentionQuery.trim().toLowerCase()
+        if (!query) return true
+        return [colleague.name, colleague.nickname, colleague.role]
+          .filter((v): v is string => Boolean(v))
+          .some((v) => v.toLowerCase().includes(query))
+      })
+  const visibleMentionOptions = mentionOptions.slice(0, 6)
+
+  const selectMention = useCallback((colleague: AiColleagueData) => {
+    const mentionName = getColleagueMentionName(colleague)
+    setInputValue((current) => {
+      const next = current.replace(/(^|\s)@([^\s@]*)$/, `$1@${mentionName} `)
+      setTimeout(() => inputRef.current?.focus(), 0)
+      return next
+    })
+    setMentionQuery(null)
+    setSelectedMentionIndex(0)
+  }, [getColleagueMentionName])
+
+  const findMentionedColleague = useCallback((content: string) => {
+    return aiColleagues.find((colleague) => {
+      const names = [colleague.name, colleague.nickname].filter((v): v is string => Boolean(v))
+      return names.some((name) => content.includes(`@${name}`))
+    }) ?? null
+  }, [aiColleagues])
 
   const handleSend = useCallback(
     (e: FormEvent) => {
@@ -92,17 +145,14 @@ export function ChannelView(): React.ReactElement {
       const content = inputValue.trim()
       if (!content || !selectedChannelId) return
 
-      const mentionPattern = /@(\S+)/
-      const mentionMatch = content.match(mentionPattern)
-      const mentionedColleague = mentionMatch
-        ? aiColleagues.find((c) => content.includes(`@${c.name}`))
-        : null
+      const mentionedColleague = findMentionedColleague(content)
 
       window.electron
         .invoke<MessageData>("message:send", selectedChannelId, content, "current-user")
         .then((msg) => {
           setMessages((prev) => [...prev, msg])
           setInputValue("")
+          setMentionQuery(null)
 
           if (mentionedColleague) {
             window.electron
@@ -112,17 +162,54 @@ export function ChannelView(): React.ReactElement {
                 payload: {
                   channelId: selectedChannelId,
                   message: content,
-                  mentionedColleague: mentionedColleague.name,
+                  mentionedColleague: getColleagueMentionName(mentionedColleague),
                 },
                 priority: 2,
+              })
+              .catch((e) => addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
+          } else if (aiColleagues.length > 0) {
+            window.electron
+              .invoke("ai:task-create", {
+                event_type: "chat_message",
+                payload: {
+                  channelId: selectedChannelId,
+                  message: content,
+                },
+                priority: 3,
               })
               .catch((e) => addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
           }
         })
         .catch((e) => addToast(`发送消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
     },
-    [inputValue, selectedChannelId, aiColleagues, addToast]
+    [inputValue, selectedChannelId, aiColleagues.length, findMentionedColleague, getColleagueMentionName, addToast]
   )
+
+  const handleInputChange = useCallback((value: string) => {
+    setInputValue(value)
+    updateMentionQuery(value)
+  }, [updateMentionQuery])
+
+  const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (mentionQuery === null || visibleMentionOptions.length === 0) {
+      if (e.key === "Escape") setMentionQuery(null)
+      return
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setSelectedMentionIndex((idx) => (idx + 1) % visibleMentionOptions.length)
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setSelectedMentionIndex((idx) => (idx - 1 + visibleMentionOptions.length) % visibleMentionOptions.length)
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      selectMention(visibleMentionOptions[selectedMentionIndex] ?? visibleMentionOptions[0])
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setMentionQuery(null)
+    }
+  }, [mentionQuery, visibleMentionOptions, selectedMentionIndex, selectMention])
 
   const selectChannel = useCallback((id: string) => {
     setSelectedChannelId(id)
@@ -158,7 +245,7 @@ export function ChannelView(): React.ReactElement {
     [selectedChannelId, loadChannels, addToast]
   )
 
-  const colleagueNames = aiColleagues.map((c) => c.name)
+  const colleagueNames = aiColleagues.flatMap((c) => [c.name, c.nickname].filter((v): v is string => Boolean(v)))
 
   if (loadingChannels) {
     return (
@@ -212,7 +299,7 @@ export function ChannelView(): React.ReactElement {
   const selectedChannel = channels.find((c) => c.id === selectedChannelId)
 
   return (
-    <div className="flex-1 flex">
+    <div className="flex-1 flex min-h-0">
       {/* Channel list */}
       <div className="w-[220px] border-r border-[var(--border-subtle)] flex flex-col bg-[var(--bg-surface)]">
         <div className="flex items-center justify-between px-3 py-2">
@@ -263,7 +350,7 @@ export function ChannelView(): React.ReactElement {
       </div>
 
       {/* Message area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {!selectedChannel ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -278,7 +365,7 @@ export function ChannelView(): React.ReactElement {
               <span className="font-semibold text-[15px] text-[var(--text-primary)]">{selectedChannel.name}</span>
             </div>
 
-            <ScrollArea className="flex-1 px-4">
+            <ScrollArea className="flex-1 min-h-0 px-4">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full pt-8">
                   <p className="text-[var(--text-secondary)] text-sm">加载消息中...</p>
@@ -322,12 +409,44 @@ export function ChannelView(): React.ReactElement {
             </ScrollArea>
 
             <form onSubmit={handleSend} className="px-4 py-3 border-t border-[var(--border-subtle)] flex gap-2 shrink-0">
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="输入消息...  使用 @AI同事名 提及AI同事"
-                className="flex-1 bg-[var(--bg-elevated)] border-[var(--border-default)] rounded-md focus:border-[var(--accent)]"
-              />
+              <div className="relative flex-1">
+                {mentionQuery !== null && mentionOptions.length > 0 && (
+                  <div className="absolute left-0 right-0 bottom-[calc(100%+8px)] z-20 rounded-md border border-[var(--border-default)] bg-[var(--bg-elevated)] shadow-lg overflow-hidden">
+                    {visibleMentionOptions.map((colleague, idx) => (
+                      <button
+                        key={colleague.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          selectMention(colleague)
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors",
+                          idx === selectedMentionIndex
+                            ? "bg-[var(--bg-hover)]"
+                            : "hover:bg-[var(--bg-hover)]"
+                        )}
+                      >
+                        <AvatarGradient name={colleague.name} className="w-7 h-7 text-[11px]" />
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">
+                            @{getColleagueMentionName(colleague)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-muted)] truncate">{colleague.role}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <Input
+                  ref={inputRef}
+                  value={inputValue}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder="输入消息...  @ 指定同事，直接发送会由空闲 AI 回复"
+                  className="w-full bg-[var(--bg-elevated)] border-[var(--border-default)] rounded-md focus:border-[var(--accent)]"
+                />
+              </div>
               <Button type="submit" size="sm" disabled={!inputValue.trim()}>
                 <Send className="w-4 h-4" />
               </Button>

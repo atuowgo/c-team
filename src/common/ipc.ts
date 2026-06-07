@@ -60,6 +60,11 @@ export interface TicketResult {
   updated_at: string
 }
 
+export interface ModelEntry {
+  id: string
+  label: string
+}
+
 export interface AiColleagueData {
   id: string
   name: string
@@ -68,6 +73,8 @@ export interface AiColleagueData {
   capabilities: string
   status: string
   current_task: string | null
+  model: string | null
+  nickname: string | null
   created_at: string
 }
 
@@ -76,6 +83,8 @@ export interface AiColleagueCreateData {
   role: string
   system_prompt: string
   capabilities?: string[]
+  model?: string | null
+  nickname?: string | null
 }
 
 export interface AiTaskData {
@@ -167,6 +176,11 @@ export interface IpcEvents {
   // Settings
   'settings:get': (key: string) => unknown
   'settings:set': (key: string, value: unknown) => void
+
+  // Models
+  'models:list': () => ModelEntry[]
+  'models:add': (id: string, label: string) => ModelEntry[]
+  'models:remove': (id: string) => ModelEntry[]
 }
 
 export interface IpcRendererEvents {

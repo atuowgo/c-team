@@ -80,7 +80,9 @@ async function startChatReply(
 
   try {
     const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful assistant.'
-    const response = await callClaude(systemPrompt, message)
+    const response = await callClaude(systemPrompt, message, {
+      modelOverride: (colleague.model as string | null) || undefined,
+    })
 
     const messageId = randomUUID()
     db.prepare(
@@ -96,6 +98,7 @@ async function startChatReply(
     const errorMsg = err instanceof Error ? err.message : String(err)
     db.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?")
       .run(errorMsg, taskId)
+    notifyRenderer("system:notification", "AI错误: " + errorMsg)
     aiScheduler.completeTask(taskId)
   }
 }
@@ -127,7 +130,9 @@ export async function startCodingPhase(
     const userMessage = buildPrompt(ticket, colleague)
 
     // Call Claude
-    const response = await callClaude(systemPrompt, userMessage)
+    const response = await callClaude(systemPrompt, userMessage, {
+      modelOverride: (colleague.model as string | null) || undefined,
+    })
 
     notifyRenderer('ai:task-progress', taskId, 60)
 

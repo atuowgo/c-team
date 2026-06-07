@@ -13,6 +13,8 @@
     "postinstall": "echo 'skip electron-rebuild (requires Python + VS Build Tools on Windows)'"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/openai": "^3.0.68",
     "@anthropic-ai/sdk": "^0.100.0",
     "@octokit/rest": "^22.0.1",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -23,6 +25,7 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "ai": "^6.0.197",
     "better-sqlite3": "^12.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -46,6 +49,7 @@
     "electron": "^40.10.2",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
+    "playwright": "^1.60.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.0.14",

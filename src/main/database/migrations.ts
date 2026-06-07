@@ -117,6 +117,14 @@ const migrations: Migration[] = [
     version: 3,
     name: 'encrypt_sensitive_settings',
     sql: `SELECT 1` // runtime migration in settings-store.ts
+  },
+  {
+    version: 4,
+    name: 'add_colleague_model_nickname',
+    sql: `
+    ALTER TABLE ai_colleagues ADD COLUMN model TEXT;
+    ALTER TABLE ai_colleagues ADD COLUMN nickname TEXT;
+  `
   }
 ]
 

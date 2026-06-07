@@ -1,76 +1,46 @@
+import { generateText } from 'ai'
+import { createAnthropic } from '@ai-sdk/anthropic'
+import { createOpenAI } from '@ai-sdk/openai'
 import { getSetting } from './settings-store'
 
-interface ClaudeConfig {
+type ProviderType = 'anthropic' | 'openai-compatible' | 'deepseek'
+
+interface LLMConfig {
+  providerType: ProviderType
+  baseURL: string
   apiKey: string
   model: string
 }
 
-function getConfig(): ClaudeConfig | null {
-  const apiKey = getSetting('apiKey') as string | null
-  const model = (getSetting('model') as string) || 'claude-sonnet-4-6'
+const PROVIDER_DEFAULT_MODEL: Record<ProviderType, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  'openai-compatible': 'gpt-4o',
+  deepseek: 'deepseek-v4-flash',
+}
 
+function normalizeModel(providerType: ProviderType, model: string): string {
+  if (providerType !== 'deepseek') return model
+  if (model === 'deepseek-chat' || model === 'deepseek-reasoner') return 'deepseek-v4-flash'
+  return model
+}
+
+function getConfig(): LLMConfig | null {
+  const apiKey = getSetting('apiKey') as string | null
   if (!apiKey) return null
-  return { apiKey, model }
+
+  const providerType = ((getSetting('providerType') as string | null) || 'deepseek') as ProviderType
+  const configuredModel = (getSetting('model') as string | null) || PROVIDER_DEFAULT_MODEL[providerType] || 'claude-sonnet-4-6'
+  const model = normalizeModel(providerType, configuredModel)
+  const baseURL = (getSetting('baseURL') as string | null) || ''
+
+  return { providerType, baseURL, apiKey, model }
 }
 
 interface CallOptions {
   maxTokens?: number
   maxRetries?: number
   timeoutMs?: number
-}
-
-async function callClaudeOnce(
-  systemPrompt: string,
-  userMessage: string,
-  config: ClaudeConfig,
-  signal: AbortSignal,
-  options?: CallOptions
-): Promise<string> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: options?.maxTokens ?? 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }]
-    }),
-    signal
-  })
-
-  if (!response.ok) {
-    const err = await response.text().catch(() => 'Unknown error')
-    const status = response.status
-    // Distinguish retryable vs non-retryable errors
-    if (status === 429 || status === 529) {
-      throw new RetryableError(`Claude API rate limited (${status}): ${err}`, status)
-    }
-    if (status >= 500) {
-      throw new RetryableError(`Claude API server error (${status}): ${err}`, status)
-    }
-    throw new Error(`Claude API error ${status}: ${err}`)
-  }
-
-  const data = await response.json()
-  const text = data?.content?.[0]?.text
-  if (typeof text !== 'string') {
-    throw new Error(`Claude API returned unexpected response format: ${JSON.stringify(data).slice(0, 200)}`)
-  }
-  return text
-}
-
-class RetryableError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'RetryableError'
-    this.status = status
-  }
+  modelOverride?: string
 }
 
 export async function callClaude(
@@ -79,43 +49,46 @@ export async function callClaude(
   options?: CallOptions
 ): Promise<string> {
   const config = getConfig()
-  if (!config) throw new Error('Claude API not configured. Please set API key in Settings.')
+  if (!config) throw new Error('AI API not configured. Please set API key in Settings.')
 
-  const maxRetries = options?.maxRetries ?? 3
-  const timeoutMs = options?.timeoutMs ?? 120_000
+  const model = options?.modelOverride || config.model
 
-  let lastError: Error | null = null
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-    try {
-      const result = await callClaudeOnce(systemPrompt, userMessage, config, controller.signal, options)
-      clearTimeout(timeout)
-      return result
-    } catch (err) {
-      clearTimeout(timeout)
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        lastError = new Error(`Claude API request timed out after ${timeoutMs / 1000}s`)
-      } else if (err instanceof Error) {
-        lastError = err
-      } else {
-        lastError = new Error(String(err))
-      }
-
-      // Don't retry on non-retryable errors (e.g., auth failure)
-      if (!(lastError instanceof RetryableError) && !(err instanceof DOMException && err.name === 'AbortError')) {
-        throw lastError
-      }
-
-      if (attempt < maxRetries) {
-        const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 16000)
-        await new Promise(resolve => setTimeout(resolve, backoff))
-      }
-    }
+  let llmModel
+  if (config.providerType === 'anthropic') {
+    const provider = createAnthropic({
+      apiKey: config.apiKey,
+      ...(config.baseURL ? { baseURL: config.baseURL } : {}),
+    })
+    llmModel = provider(model)
+  } else if (config.providerType === 'deepseek') {
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.deepseek.com',
+    })
+    llmModel = provider.chat(model)
+  } else {
+    const provider = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.openai.com/v1',
+    })
+    llmModel = provider(model)
   }
 
-  throw lastError || new Error('Claude API request failed after retries')
+  const timeoutMs = options?.timeoutMs ?? 120_000
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const { text } = await generateText({
+      model: llmModel,
+      system: systemPrompt,
+      prompt: userMessage,
+      maxOutputTokens: options?.maxTokens ?? 4096,
+      maxRetries: options?.maxRetries ?? 3,
+      abortSignal: controller.signal,
+    })
+    return text
+  } finally {
+    clearTimeout(timeout)
+  }
 }
