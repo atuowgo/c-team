@@ -32,18 +32,21 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
       let teamInfo = ''
       if (channelId) {
         const members = db.prepare(
-          `SELECT c.name, c.nickname, r.name as role_name, c.personal_notes
+          `SELECT c.name, c.nickname, r.name as role_name, r.description as role_description, c.personal_notes
            FROM channel_members cm
            JOIN ai_colleagues c ON cm.colleague_id = c.id
            LEFT JOIN ai_roles r ON c.role_id = r.id
            WHERE cm.channel_id = ? AND cm.colleague_id != 'system-manager'`
-        ).all(channelId) as Array<{ name: string; nickname: string | null; role_name: string; personal_notes: string | null }>
+        ).all(channelId) as Array<{ name: string; nickname: string | null; role_name: string; role_description: string | null; personal_notes: string | null }>
         if (members.length > 0) {
-          teamInfo = '\n\n你的团队成员：\n' + members.map((m) => {
-            const displayName = m.nickname || m.name
-            const notes = m.personal_notes ? `，${m.personal_notes}` : ''
-            return `- @${displayName}（${m.role_name}${notes}）`
-          }).join('\n') + '\n需要分配任务时，@对应成员即可。'
+          teamInfo = '\n\n你的团队成员（分配任务时必须使用下列 @ 后的精确名称，不得修改或添加任何修饰词）：\n' +
+            members.map((m) => {
+              const displayName = m.nickname || m.name
+              const desc = m.role_description ? m.role_description : ''
+              const notes = m.personal_notes ? `；${m.personal_notes}` : ''
+              return `- @${displayName}【${m.role_name}】${desc}${notes}`
+            }).join('\n') +
+            '\n根据任务内容匹配最合适的成员，@提及时只能使用上面列出的精确名称。'
         }
       }
       const managerColleague = {
@@ -157,6 +160,32 @@ async function startChatReply(
     )
 
     processMemoryJobs().catch(console.error)
+
+    // When system-manager responds, create tasks for any @mentioned channel members
+    if (colleagueId === 'system-manager') {
+      const channelMembers = db.prepare(
+        `SELECT c.id, c.name, c.nickname
+         FROM channel_members cm
+         JOIN ai_colleagues c ON cm.colleague_id = c.id
+         WHERE cm.channel_id = ? AND cm.colleague_id != 'system-manager'`
+      ).all(channelId) as Array<{ id: string; name: string; nickname: string | null }>
+
+      for (const member of channelMembers) {
+        const names = [member.name, member.nickname].filter((n): n is string => Boolean(n))
+        if (names.some((n) => response.includes(`@${n}`))) {
+          db.prepare(
+            'INSERT INTO ai_task_queue (id, colleague_id, event_type, payload, priority, status) VALUES (?, ?, ?, ?, ?, ?)'
+          ).run(
+            randomUUID(),
+            member.id,
+            'chat_mention',
+            JSON.stringify({ channelId, message: response, mentionedColleague: member.nickname || member.name }),
+            2,
+            'pending'
+          )
+        }
+      }
+    }
 
     db.prepare("UPDATE ai_task_queue SET status='completed', result=?, completed_at=datetime('now') WHERE id=?")
       .run(JSON.stringify({ reply: response }), taskId)

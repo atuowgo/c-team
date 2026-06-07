@@ -12,9 +12,25 @@ import {
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
 import { useAppStore } from "@/stores/app-store"
-import type { ChannelData, MessageData, AiColleagueData } from "@common/ipc"
+import type { ChannelData, MessageData, AiColleagueData, ChannelMemberData } from "@common/ipc"
 import { Hash, Plus, X, Send, MessageSquare } from "lucide-react"
 import { AvatarGradient } from "@/components/ui/avatar"
+
+const SYSTEM_MANAGER_MENTION: AiColleagueData = {
+  id: 'system-manager',
+  name: '频道管理员',
+  nickname: '频道管理员',
+  role: '频道管理员',
+  system_prompt: '',
+  capabilities: '[]',
+  status: 'idle',
+  current_task: null,
+  model: null,
+  type: 'manager',
+  created_at: '',
+  role_id: null,
+  personal_notes: null,
+}
 
 function highlightMentions(content: string, colleagueNames: string[]): React.ReactNode[] {
   if (colleagueNames.length === 0) return [content]
@@ -52,6 +68,7 @@ export function ChannelView(): React.ReactElement {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newChannelName, setNewChannelName] = useState("")
+  const [hasSystemManager, setHasSystemManager] = useState(false)
   // Feature 1: Typing indicator
   const [typingColleagues, setTypingColleagues] = useState<Map<string, string>>(new Map())
   // Feature 2: Reply-To / Quote Reply
@@ -89,6 +106,13 @@ export function ChannelView(): React.ReactElement {
     })
     return () => { unsub?.() }
   }, [])
+
+  useEffect(() => {
+    if (!selectedChannelId) { setHasSystemManager(false); return }
+    window.electron.invoke<ChannelMemberData[]>("channel:members-list", selectedChannelId)
+      .then((members) => setHasSystemManager(members.some((m) => m.colleague_id === "system-manager")))
+      .catch(() => { setHasSystemManager(false) })
+  }, [selectedChannelId])
 
   const loadMessages = useCallback((channelId: string) => {
     setLoadingMessages(true)
@@ -151,9 +175,10 @@ export function ChannelView(): React.ReactElement {
     return colleague.nickname || colleague.name
   }, [])
 
+  const mentionCandidates = hasSystemManager ? [SYSTEM_MANAGER_MENTION, ...aiColleagues] : aiColleagues
   const mentionOptions = mentionQuery === null
     ? []
-    : aiColleagues.filter((colleague) => {
+    : mentionCandidates.filter((colleague) => {
         const query = mentionQuery.trim().toLowerCase()
         if (!query) return true
         return [colleague.name, colleague.nickname, colleague.role]
@@ -174,11 +199,12 @@ export function ChannelView(): React.ReactElement {
   }, [getColleagueMentionName])
 
   const findMentionedColleague = useCallback((content: string) => {
-    return aiColleagues.find((colleague) => {
+    const candidates = hasSystemManager ? [SYSTEM_MANAGER_MENTION, ...aiColleagues] : aiColleagues
+    return candidates.find((colleague) => {
       const names = [colleague.name, colleague.nickname].filter((v): v is string => Boolean(v))
       return names.some((name) => content.includes(`@${name}`))
     }) ?? null
-  }, [aiColleagues])
+  }, [aiColleagues, hasSystemManager])
 
   const handleSend = useCallback(
     (e: FormEvent) => {
@@ -295,7 +321,10 @@ export function ChannelView(): React.ReactElement {
     [selectedChannelId, loadChannels, addToast]
   )
 
-  const colleagueNames = aiColleagues.flatMap((c) => [c.name, c.nickname].filter((v): v is string => Boolean(v)))
+  const colleagueNames = [
+    ...(hasSystemManager ? ["频道管理员"] : []),
+    ...aiColleagues.flatMap((c) => [c.name, c.nickname].filter((v): v is string => Boolean(v))),
+  ]
 
   if (loadingChannels) {
     return (

@@ -4,6 +4,7 @@ interface Migration {
   version: number
   name: string
   sql: string
+  requiresFkOff?: boolean
 }
 
 const migrations: Migration[] = [
@@ -216,6 +217,36 @@ const migrations: Migration[] = [
     INSERT OR IGNORE INTO channel_members (channel_id, colleague_id)
     SELECT channel_id, 'system-manager' FROM channel_managers;
   `
+  },
+  {
+    version: 8,
+    name: 'fix_task_queue_colleague_fk',
+    requiresFkOff: true,
+    sql: `
+    CREATE TABLE ai_task_queue_v8 (
+      id TEXT PRIMARY KEY,
+      colleague_id TEXT,
+      event_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      priority INTEGER DEFAULT 3,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO ai_task_queue_v8 SELECT id, colleague_id, event_type, payload, priority, status, result, completed_at, created_at FROM ai_task_queue;
+    DROP TABLE ai_task_queue;
+    ALTER TABLE ai_task_queue_v8 RENAME TO ai_task_queue;
+    `
+  },
+  {
+    version: 9,
+    name: 'add_role_description',
+    sql: `
+    ALTER TABLE ai_roles ADD COLUMN description TEXT NOT NULL DEFAULT '';
+    UPDATE ai_roles SET description = '负责理解用户需求、分解任务并协调团队成员执行' WHERE id = 'system-manager';
+    UPDATE ai_roles SET description = '协助完成分配给你的各类任务' WHERE id = 'role-default';
+    `
   }
 ]
 
@@ -235,8 +266,10 @@ export function runMigrations(db: Database.Database): void {
 
   for (const m of migrations) {
     if (!applied.has(m.version)) {
+      if (m.requiresFkOff) db.pragma('foreign_keys = OFF')
       db.exec(m.sql)
       db.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)').run(m.version, m.name)
+      if (m.requiresFkOff) db.pragma('foreign_keys = ON')
     }
   }
 }

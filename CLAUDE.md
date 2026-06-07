@@ -41,4 +41,10 @@
 - **表单提交用 `form.requestSubmit()`**：CDP key dispatch（Enter）不触发 React onSubmit；正确：`document.querySelector('form').requestSubmit()`
 - **Quartz CGEventPost 合成点击被 macOS 安全机制拦截**：无障碍授权的 app 才能用，普通脚本无效，改用 CDP WebSocket 方案
 
+## SQLite 迁移铁律
+
+- **SQLite 无法 ALTER TABLE DROP CONSTRAINT**：要删除 FK 约束，必须新建无约束表 → INSERT 数据 → DROP 旧表 → RENAME。见 Migration v8。
+- **`PRAGMA foreign_keys = OFF` 必须在事务外执行**：该 PRAGMA 在事务内是 no-op；迁移时需先 `db.pragma('foreign_keys = OFF')` 再 `db.exec(m.sql)`，不能写在 SQL 字符串内。
+- **system-manager 只存在于 ai_roles，不在 ai_colleagues**：`ai_task_queue.colleague_id` 若有 `REFERENCES ai_colleagues(id)` 的 FK，UPDATE SET colleague_id='system-manager' 会抛 FOREIGN KEY constraint failed，导致任务永远卡在 pending。Migration v8 已修复此约束。
+
 @RULE.md
