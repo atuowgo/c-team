@@ -125,6 +125,50 @@ const migrations: Migration[] = [
     ALTER TABLE ai_colleagues ADD COLUMN model TEXT;
     ALTER TABLE ai_colleagues ADD COLUMN nickname TEXT;
   `
+  },
+  {
+    version: 5,
+    name: 'memory_and_features',
+    sql: `
+    ALTER TABLE messages ADD COLUMN reply_to_id TEXT;
+
+    CREATE TABLE IF NOT EXISTS channel_managers (
+      channel_id TEXT PRIMARY KEY,
+      colleague_id TEXT NOT NULL,
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+      FOREIGN KEY (colleague_id) REFERENCES ai_colleagues(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS channel_memories (
+      channel_id TEXT PRIMARY KEY,
+      summary TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS topic_summaries (
+      topic_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      message_count INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS colleague_notes (
+      colleague_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (colleague_id, channel_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_jobs (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `
   }
 ]
 

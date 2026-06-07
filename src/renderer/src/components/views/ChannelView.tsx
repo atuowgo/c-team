@@ -51,6 +51,15 @@ export function ChannelView(): React.ReactElement {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newChannelName, setNewChannelName] = useState("")
+  // Feature 1: Typing indicator
+  const [typingColleagues, setTypingColleagues] = useState<Map<string, string>>(new Map())
+  // Feature 2: Reply-To / Quote Reply
+  const [replyToId, setReplyToId] = useState<string | null>(null)
+  const [replyToContent, setReplyToContent] = useState<string>("")
+  // Feature 4: Channel Manager
+  const [channelManager, setChannelManager] = useState<AiColleagueData | null>(null)
+  // Hover state for message reply buttons
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const addToast = useToastStore((s) => s.addToast)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -72,6 +81,15 @@ export function ChannelView(): React.ReactElement {
       .catch((e) => addToast(`加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [loadChannels, addToast])
 
+  useEffect(() => {
+    const unsub = window.electron.on("ai:status-changed", (colleagueId: unknown, status: unknown) => {
+      setAiColleagues((prev) =>
+        prev.map((c) => (c.id === (colleagueId as string) ? { ...c, status: (status as string) ?? c.status } : c))
+      )
+    })
+    return () => { unsub?.() }
+  }, [])
+
   const loadMessages = useCallback((channelId: string) => {
     setLoadingMessages(true)
     window.electron
@@ -87,6 +105,11 @@ export function ChannelView(): React.ReactElement {
   useEffect(() => {
     if (!selectedChannelId) return
     loadMessages(selectedChannelId)
+    // Feature 4: fetch channel manager when channel changes
+    window.electron
+      .invoke<AiColleagueData | null>("channel:manager-get", selectedChannelId)
+      .then((manager) => setChannelManager(manager))
+      .catch(() => setChannelManager(null))
   }, [selectedChannelId, loadMessages])
 
   useEffect(() => {
@@ -99,6 +122,29 @@ export function ChannelView(): React.ReactElement {
     })
     return unsubscribe
   }, [selectedChannelId, loadMessages])
+
+  // Feature 1: Subscribe to typing indicators and new messages
+  useEffect(() => {
+    const unsubTypingStart = window.electron.on("ai:typing-start", (colleagueId: unknown, displayName: unknown) => {
+      setTypingColleagues((prev) => new Map(prev).set(colleagueId as string, displayName as string))
+    })
+    const unsubTypingStop = window.electron.on("ai:typing-stop", (colleagueId: unknown) => {
+      setTypingColleagues((prev) => {
+        const next = new Map(prev)
+        next.delete(colleagueId as string)
+        return next
+      })
+    })
+    const unsubMessageNew = window.electron.on("message:new", (msg: unknown) => {
+      const message = msg as MessageData
+      setMessages((prev) => (prev.find((m) => m.id === message.id) ? prev : [...prev, message]))
+    })
+    return () => {
+      unsubTypingStart()
+      unsubTypingStop()
+      unsubMessageNew()
+    }
+  }, [])
 
   const updateMentionQuery = useCallback((value: string) => {
     const match = value.match(/(?:^|\s)@([^\s@]*)$/)
@@ -146,13 +192,17 @@ export function ChannelView(): React.ReactElement {
       if (!content || !selectedChannelId) return
 
       const mentionedColleague = findMentionedColleague(content)
+      const currentReplyToId = replyToId
 
       window.electron
-        .invoke<MessageData>("message:send", selectedChannelId, content, "current-user")
+        .invoke<MessageData>("message:send", selectedChannelId, content, "current-user", currentReplyToId)
         .then((msg) => {
           setMessages((prev) => [...prev, msg])
           setInputValue("")
           setMentionQuery(null)
+          // Feature 2: clear reply state after send
+          setReplyToId(null)
+          setReplyToContent("")
 
           if (mentionedColleague) {
             window.electron
@@ -182,7 +232,7 @@ export function ChannelView(): React.ReactElement {
         })
         .catch((e) => addToast(`发送消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
     },
-    [inputValue, selectedChannelId, aiColleagues.length, findMentionedColleague, getColleagueMentionName, addToast]
+    [inputValue, selectedChannelId, aiColleagues.length, findMentionedColleague, getColleagueMentionName, addToast, replyToId]
   )
 
   const handleInputChange = useCallback((value: string) => {
@@ -214,6 +264,10 @@ export function ChannelView(): React.ReactElement {
   const selectChannel = useCallback((id: string) => {
     setSelectedChannelId(id)
     setMessages([])
+    // Reset reply state when switching channels
+    setReplyToId(null)
+    setReplyToContent("")
+    setChannelManager(null)
   }, [])
 
   const handleCreateChannel = useCallback(() => {
@@ -347,6 +401,58 @@ export function ChannelView(): React.ReactElement {
             </div>
           ))}
         </ScrollArea>
+
+        {/* Feature 4: Channel Manager in sidebar */}
+        {channelManager && (
+          <div className="px-3 py-2 border-t border-[var(--border-subtle)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+              管理员
+            </p>
+            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-2 mb-2">
+              <span title="频道管理员" className="text-sm leading-none">👑</span>
+              <AvatarGradient name={channelManager.name} className="w-6 h-6 text-[10px]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-medium text-[var(--text-primary)] truncate">
+                  {channelManager.nickname || channelManager.name}
+                </p>
+                <p className="text-[10px] text-[var(--text-muted)]">管理员</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Colleagues list */}
+        {aiColleagues.length > 0 && (
+          <div className="px-3 py-2 border-t border-[var(--border-subtle)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+              AI 同事
+            </p>
+            <div className="flex flex-col gap-1">
+              {aiColleagues.map((colleague) => (
+                <div key={colleague.id} className="flex items-center gap-2 py-0.5">
+                  {/* Feature 3: Status dot — idle=green, busy=amber */}
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{
+                      backgroundColor:
+                        colleague.status === "busy"
+                          ? "#f59e0b"
+                          : colleague.status === "idle"
+                          ? "#22c55e"
+                          : "var(--text-muted)",
+                    }}
+                  />
+                  <span className="text-[12px] text-[var(--text-secondary)] truncate flex-1">
+                    {colleague.nickname || colleague.name}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)] shrink-0">
+                    {colleague.status === "busy" ? "处理中" : "空闲"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Message area */}
@@ -383,9 +489,11 @@ export function ChannelView(): React.ReactElement {
                     <div
                       key={msg.id}
                       className="flex gap-3 px-2 py-1 -mx-2 rounded-md hover:bg-[var(--bg-hover)]/50 transition-colors group"
+                      onMouseEnter={() => setHoveredMessageId(msg.id)}
+                      onMouseLeave={() => setHoveredMessageId(null)}
                     >
                       <AvatarGradient name={msg.sender_id} className="w-9 h-9 text-xs" />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2">
                           <span className="text-[13.5px] font-semibold text-[var(--text-primary)]">
                             {msg.sender_id}
@@ -396,7 +504,35 @@ export function ChannelView(): React.ReactElement {
                               minute: "2-digit",
                             })}
                           </span>
+                          {/* Feature 2: Reply button on hover */}
+                          {hoveredMessageId === msg.id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyToId(msg.id)
+                                setReplyToContent(msg.content.slice(0, 60))
+                                inputRef.current?.focus()
+                              }}
+                              className="ml-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)]"
+                            >
+                              回复
+                            </button>
+                          )}
                         </div>
+                        {/* Feature 2: Show quote reference if this message is a reply */}
+                        {msg.reply_to_id && (
+                          <div
+                            style={{
+                              borderLeft: "2px solid var(--accent)",
+                              paddingLeft: "8px",
+                              fontSize: "12px",
+                              color: "var(--text-muted)",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            回复了一条消息
+                          </div>
+                        )}
                         <p className="text-[13.5px] leading-relaxed text-[var(--text-primary)] break-words whitespace-pre-wrap">
                           {highlightMentions(msg.content, colleagueNames)}
                         </p>
@@ -408,8 +544,59 @@ export function ChannelView(): React.ReactElement {
               )}
             </ScrollArea>
 
-            <form onSubmit={handleSend} className="px-4 py-3 border-t border-[var(--border-subtle)] flex gap-2 shrink-0">
-              <div className="relative flex-1">
+            {/* Feature 1: Typing indicators */}
+            {typingColleagues.size > 0 && (
+              <div className="px-4">
+                {Array.from(typingColleagues.entries()).map(([id, name]) => (
+                  <div key={id} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground">
+                    <span className="font-medium">{name}</span>
+                    <span className="animate-pulse">•••</span>
+                    <span>正在输入...</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleSend} className="px-4 py-3 border-t border-[var(--border-subtle)] flex flex-col gap-2 shrink-0">
+              {/* Feature 2: Quote reply card */}
+              {replyToId && (
+                <div
+                  style={{
+                    borderLeft: "3px solid var(--accent)",
+                    background: "var(--bg-elevated)",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-secondary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    回复: {replyToContent}{replyToContent.length >= 60 ? "..." : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplyToId(null)
+                      setReplyToContent("")
+                    }}
+                    className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    title="取消回复"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="relative flex-1 flex gap-2">
                 {mentionQuery !== null && mentionOptions.length > 0 && (
                   <div className="absolute left-0 right-0 bottom-[calc(100%+8px)] z-20 rounded-md border border-[var(--border-default)] bg-[var(--bg-elevated)] shadow-lg overflow-hidden">
                     {visibleMentionOptions.map((colleague, idx) => (
@@ -446,10 +633,10 @@ export function ChannelView(): React.ReactElement {
                   placeholder="输入消息...  @ 指定同事，直接发送会由空闲 AI 回复"
                   className="w-full bg-[var(--bg-elevated)] border-[var(--border-default)] rounded-md focus:border-[var(--accent)]"
                 />
+                <Button type="submit" size="sm" disabled={!inputValue.trim()}>
+                  <Send className="w-4 h-4" />
+                </Button>
               </div>
-              <Button type="submit" size="sm" disabled={!inputValue.trim()}>
-                <Send className="w-4 h-4" />
-              </Button>
             </form>
           </>
         )}

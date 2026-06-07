@@ -4,6 +4,7 @@ import { callClaude } from './claude-api'
 import { createBranch, commitFile, createPullRequest } from './github-api'
 import { aiScheduler } from './ai-scheduler'
 import { startPlanningPhase } from './planning-phase'
+import { processMemoryJobs } from './memory-manager'
 import { BrowserWindow } from 'electron'
 
 // Main entry point: called when a task is assigned to a colleague
@@ -77,17 +78,47 @@ async function startChatReply(
   const db = getDatabase()
   const channelId = payload.channelId as string
   const message = payload.message as string
+  const colleagueId = colleague.id as string
+  const displayName = (colleague.nickname as string | null) || (colleague.name as string)
+
+  notifyRenderer('ai:typing-start', colleagueId, displayName)
 
   try {
     const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful assistant.'
-    const response = await callClaude(systemPrompt, message, {
-      modelOverride: (colleague.model as string | null) || undefined,
-    })
+    let response: string
+    try {
+      response = await callClaude(systemPrompt, message, {
+        modelOverride: (colleague.model as string | null) || undefined,
+      })
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      db.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?")
+        .run(errorMsg, taskId)
+      notifyRenderer("system:notification", "AI错误: " + errorMsg)
+      aiScheduler.completeTask(taskId)
+      return
+    } finally {
+      notifyRenderer('ai:typing-stop', colleagueId)
+    }
 
     const messageId = randomUUID()
     db.prepare(
       'INSERT INTO messages (id, channel_id, sender_id, content) VALUES (?, ?, ?, ?)'
-    ).run(messageId, channelId, (colleague.nickname as string | null) || (colleague.name as string), response)
+    ).run(messageId, channelId, displayName, response)
+
+    const newMsg = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId)
+    notifyRenderer('message:new', newMsg)
+
+    db.prepare('INSERT INTO memory_jobs (id, type, payload) VALUES (?, ?, ?)').run(
+      randomUUID(), 'colleague_notes',
+      JSON.stringify({ channelId, colleagueId, aiResponse: response })
+    )
+    db.prepare('INSERT INTO memory_jobs (id, type, payload) VALUES (?, ?, ?)').run(
+      randomUUID(), 'topic_snapshot',
+      JSON.stringify({ channelId, messageId })
+    )
+
+    processMemoryJobs().catch(console.error)
 
     db.prepare("UPDATE ai_task_queue SET status='completed', result=?, completed_at=datetime('now') WHERE id=?")
       .run(JSON.stringify({ reply: response }), taskId)

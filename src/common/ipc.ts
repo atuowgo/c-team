@@ -16,6 +16,7 @@ export interface MessageData {
   sender_id: string
   content: string
   parent_id: string | null
+  reply_to_id: string | null
   context_ref: string | null
   created_at: string
 }
@@ -78,6 +79,8 @@ export interface AiColleagueData {
   created_at: string
 }
 
+export interface ChannelManagerData { channelId: string; colleague: AiColleagueData | null }
+
 export interface AiColleagueCreateData {
   name: string
   role: string
@@ -127,10 +130,12 @@ export interface IpcEvents {
   'channel:list': () => ChannelData[]
   'channel:create': (name: string) => ChannelData
   'channel:delete': (id: string) => { success: boolean }
+  'channel:manager-get': (channelId: string) => AiColleagueData | null
+  'channel:manager-set': (channelId: string, colleagueId: string) => { success: boolean }
 
   // Messages
   'message:list': (channelId: string) => MessageData[]
-  'message:send': (channelId: string, content: string, senderId: string) => MessageData
+  'message:send': (channelId: string, content: string, senderId: string, replyToId?: string | null) => MessageData
   'message:delete': (id: string) => { success: boolean }
 
   // Boards
@@ -192,4 +197,7 @@ export interface IpcRendererEvents {
   'ai:plan-submitted': (taskId: string, ticketId: string, planContent: string) => void
   'ai:plan-approved': (taskId: string) => void
   'ai:plan-rejected': (taskId: string) => void
+  'ai:typing-start': (colleagueId: string, displayName: string) => void
+  'ai:typing-stop': (colleagueId: string) => void
+  'message:new': (message: MessageData) => void
 }

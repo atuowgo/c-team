@@ -3,6 +3,8 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import { getSetting } from './settings-store'
 
+export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+
 type ProviderType = 'anthropic' | 'openai-compatible' | 'deepseek'
 
 interface LLMConfig {
@@ -45,7 +47,7 @@ interface CallOptions {
 
 export async function callClaude(
   systemPrompt: string,
-  userMessage: string,
+  userMessageOrMessages: string | ChatMessage[],
   options?: CallOptions
 ): Promise<string> {
   const config = getConfig()
@@ -78,11 +80,16 @@ export async function callClaude(
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
+  const messages: ChatMessage[] =
+    typeof userMessageOrMessages === 'string'
+      ? [{ role: 'user', content: userMessageOrMessages }]
+      : userMessageOrMessages
+
   try {
     const { text } = await generateText({
       model: llmModel,
       system: systemPrompt,
-      prompt: userMessage,
+      messages,
       maxOutputTokens: options?.maxTokens ?? 4096,
       maxRetries: options?.maxRetries ?? 3,
       abortSignal: controller.signal,

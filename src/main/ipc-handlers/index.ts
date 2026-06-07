@@ -18,11 +18,23 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('channel:create', (_e, name: string) => {
     const id = randomUUID()
     db.prepare('INSERT INTO channels (id, name) VALUES (?, ?)').run(id, name)
+    db.prepare('INSERT OR IGNORE INTO channel_memories (channel_id) VALUES (?)').run(id)
     return db.prepare('SELECT * FROM channels WHERE id = ?').get(id)
   })
 
   ipcMain.handle('channel:delete', (_e, id: string) => {
     db.prepare('DELETE FROM channels WHERE id = ?').run(id)
+    return { success: true }
+  })
+
+  ipcMain.handle('channel:manager-get', (_e, channelId: string) => {
+    const row = db.prepare('SELECT colleague_id FROM channel_managers WHERE channel_id = ?').get(channelId) as { colleague_id: string } | undefined
+    if (!row) return null
+    return db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(row.colleague_id) ?? null
+  })
+
+  ipcMain.handle('channel:manager-set', (_e, channelId: string, colleagueId: string) => {
+    db.prepare('INSERT OR REPLACE INTO channel_managers (channel_id, colleague_id) VALUES (?, ?)').run(channelId, colleagueId)
     return { success: true }
   })
 
@@ -34,11 +46,11 @@ export function registerIpcHandlers(): void {
     ).all(channelId)
   })
 
-  ipcMain.handle('message:send', (_e, channelId: string, content: string, senderId: string) => {
+  ipcMain.handle('message:send', (_e, channelId: string, content: string, senderId: string, replyToId?: string) => {
     const id = randomUUID()
     db.prepare(
-      'INSERT INTO messages (id, channel_id, sender_id, content) VALUES (?, ?, ?, ?)'
-    ).run(id, channelId, senderId, content)
+      'INSERT INTO messages (id, channel_id, sender_id, content, reply_to_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(id, channelId, senderId, content, replyToId ?? null)
     return db.prepare('SELECT * FROM messages WHERE id = ?').get(id)
   })
 

@@ -55,6 +55,66 @@ class AiScheduler {
     let colleague = preAssignedId
       ? db.prepare("SELECT * FROM ai_colleagues WHERE id = ? AND status = 'idle'").get(preAssignedId) as Record<string, unknown> | undefined
       : undefined
+
+    // For unaddressed messages (no pre-assigned colleague), check channel_managers first
+    if (!colleague && !preAssignedId) {
+      let channelId: string | undefined
+      try {
+        const payload = JSON.parse(task.payload as string)
+        channelId = payload.channelId as string | undefined
+      } catch {
+        // payload not JSON or missing — skip channel manager lookup
+      }
+      if (channelId) {
+        const managerRow = db.prepare(
+          'SELECT colleague_id FROM channel_managers WHERE channel_id = ?'
+        ).get(channelId) as { colleague_id: string } | undefined
+        if (managerRow) {
+          const mgr = db.prepare("SELECT * FROM ai_colleagues WHERE id = ?")
+            .get(managerRow.colleague_id) as Record<string, unknown> | undefined
+
+          if (mgr && mgr.status === 'idle') {
+            // Manager is free — assign and dispatch immediately
+            db.prepare(
+              `UPDATE ai_task_queue SET colleague_id = ?, status = 'assigned' WHERE id = ?`
+            ).run(managerRow.colleague_id, taskId)
+            db.prepare("UPDATE ai_colleagues SET status = 'busy', current_task = ? WHERE id = ?")
+              .run(taskId, managerRow.colleague_id)
+
+            const win = BrowserWindow.getAllWindows()[0]
+            if (win) {
+              win.webContents.send('ai:task-assigned', taskId, managerRow.colleague_id)
+              win.webContents.send('ai:status-changed', managerRow.colleague_id, 'busy')
+            }
+
+            startProgrammingSession(taskId).catch((err) => {
+              console.error('Programming session failed (channel manager):', err)
+              try {
+                const db2 = getDatabase()
+                const taskCheck = db2.prepare('SELECT status FROM ai_task_queue WHERE id = ?')
+                  .get(taskId) as { status: string } | undefined
+                if (taskCheck && taskCheck.status !== 'failed' && taskCheck.status !== 'completed') {
+                  db2.prepare("UPDATE ai_task_queue SET status='failed', result=?, completed_at=datetime('now') WHERE id=?")
+                    .run(err instanceof Error ? err.message : String(err), taskId)
+                }
+              } catch (cleanupErr) {
+                console.error('Cleanup failed (channel manager):', cleanupErr)
+              }
+              this.completeTask(taskId)
+            })
+          } else {
+            // Manager is busy — pin colleague_id so next tick dispatches to manager once idle
+            // Keep status = 'pending' so tick() picks it up again
+            db.prepare(
+              `UPDATE ai_task_queue SET colleague_id = ? WHERE id = ?`
+            ).run(managerRow.colleague_id, taskId)
+          }
+          // Either way, skip the any-idle-colleague fallback
+          return
+        }
+      }
+    }
+
     if (!colleague) {
       colleague = db.prepare("SELECT * FROM ai_colleagues WHERE status = 'idle' LIMIT 1").get() as Record<string, unknown> | undefined
     }
