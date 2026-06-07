@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useToastStore } from "@/stores/toast-store"
-import type { AiColleagueData, ModelEntry } from "@common/ipc"
+import type { AiRoleData, ModelEntry } from "@common/ipc"
 
-type TabValue = "api" | "github" | "colleagues"
+type TabValue = "api" | "github" | "roles"
 type ProviderType = "anthropic" | "openai-compatible" | "deepseek"
 
 const BUILTIN_MODELS: Record<ProviderType, ModelEntry[]> = {
@@ -44,25 +44,6 @@ function normalizeProviderModel(providerType: ProviderType, value: string): stri
   return value
 }
 
-function statusDot(status: string): string {
-  if (status === "online") return "bg-[var(--success)]"
-  if (status === "busy") return "bg-[var(--warning)]"
-  if (status === "idle") return "bg-[var(--text-muted)]"
-  return "border border-[var(--text-muted)]"
-}
-
-function statusLabel(status: string): string {
-  if (status === "online") return "在线"
-  if (status === "idle") return "空闲"
-  if (status === "busy") return "忙碌"
-  return "离线"
-}
-
-function getAvatarClass(name: string): string {
-  const idx = name.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 8
-  return `avatar-gradient-${idx}`
-}
-
 export function SettingsView(): React.ReactElement {
   const [tab, setTab] = useState<TabValue>("api")
 
@@ -88,20 +69,14 @@ export function SettingsView(): React.ReactElement {
   const [ghSaving, setGhSaving] = useState(false)
   const [ghConnected, setGhConnected] = useState<boolean | null>(null)
 
-  // AI colleagues
-  const [colleagues, setColleagues] = useState<AiColleagueData[]>([])
-  const [colleaguesLoading, setColleaguesLoading] = useState(false)
-
-  // Colleague edit panel state
-  const [selectedColleagueId, setSelectedColleagueId] = useState<string | null>(null) // null = none, 'new' = create form
-  const [editNickname, setEditNickname] = useState('')
-  const [editRole, setEditRole] = useState('')
-  const [editModel, setEditModel] = useState('')
-  const [editSystemPrompt, setEditSystemPrompt] = useState('')
-  const [editCapabilities, setEditCapabilities] = useState<string[]>([])
-  const [editSaving, setEditSaving] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [capInput, setCapInput] = useState('')
+  // Roles (岗位)
+  const [roles, setRoles] = useState<AiRoleData[]>([])
+  const [rolesLoading, setRolesLoading] = useState(false)
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
+  const [editRoleName, setEditRoleName] = useState("")
+  const [editRolePrompt, setEditRolePrompt] = useState("")
+  const [roleSaving, setRoleSaving] = useState(false)
+  const [roleDeleteConfirm, setRoleDeleteConfirm] = useState(false)
 
   const addToast = useToastStore((s) => s.addToast)
 
@@ -173,88 +148,70 @@ export function SettingsView(): React.ReactElement {
       .catch((e) => addToast(`删除模型失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
   }, [model, providerType, addToast])
 
-  const loadColleagues = useCallback(() => {
-    setColleaguesLoading(true)
-    window.electron.invoke<AiColleagueData[]>("ai:list").then((list) => {
-      setColleagues(list)
-    }).catch((e) => addToast(`加载AI同事列表失败: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => setColleaguesLoading(false))
+  // --- Roles ---
+  const loadRoles = useCallback(() => {
+    setRolesLoading(true)
+    window.electron.invoke<AiRoleData[]>("ai:role-list")
+      .then((list) => setRoles(list))
+      .catch((e) => addToast(`加载岗位列表失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
+      .finally(() => setRolesLoading(false))
   }, [addToast])
 
   useEffect(() => {
-    if (tab === "colleagues") loadColleagues()
-  }, [tab, loadColleagues])
+    if (tab === "roles") loadRoles()
+  }, [tab, loadRoles])
 
-  const handleSelectColleague = useCallback((c: AiColleagueData) => {
-    setSelectedColleagueId(c.id)
-    setEditNickname(c.nickname || '')
-    setEditRole(c.role)
-    setEditModel(c.model || '')
-    setEditSystemPrompt(c.system_prompt)
-    try { setEditCapabilities(JSON.parse(c.capabilities) as string[]) } catch { setEditCapabilities([]) }
-    setDeleteConfirm(false)
+  const handleSelectRole = useCallback((r: AiRoleData) => {
+    setSelectedRoleId(r.id)
+    setEditRoleName(r.name)
+    setEditRolePrompt(r.system_prompt)
+    setRoleDeleteConfirm(false)
   }, [])
 
-  const handleNewColleague = useCallback(() => {
-    setSelectedColleagueId('new')
-    setEditNickname('')
-    setEditRole('')
-    setEditModel('')
-    setEditSystemPrompt('')
-    setEditCapabilities([])
-    setDeleteConfirm(false)
+  const handleNewRole = useCallback(() => {
+    setSelectedRoleId("new")
+    setEditRoleName("")
+    setEditRolePrompt("")
+    setRoleDeleteConfirm(false)
   }, [])
 
-  const handleSaveColleague = useCallback(async () => {
-    if (!editRole.trim() || !editSystemPrompt.trim()) {
-      addToast('角色和系统提示词不能为空', 'error')
+  const handleSaveRole = useCallback(async () => {
+    if (!editRoleName.trim()) {
+      addToast("岗位名称不能为空", "error")
       return
     }
-    setEditSaving(true)
+    setRoleSaving(true)
     try {
-      const payload = {
-        name: editNickname.trim() || editRole.trim(),
-        role: editRole.trim(),
-        system_prompt: editSystemPrompt.trim(),
-        capabilities: editCapabilities,
-        model: editModel || null,
-        nickname: editNickname.trim() || null,
-      }
-      if (selectedColleagueId === 'new') {
-        await window.electron.invoke('ai:create', payload)
+      if (selectedRoleId === "new") {
+        await window.electron.invoke("ai:role-create", {
+          name: editRoleName.trim(),
+          system_prompt: editRolePrompt.trim(),
+        })
       } else {
-        await window.electron.invoke('ai:update', selectedColleagueId, payload)
+        await window.electron.invoke("ai:role-update", selectedRoleId, {
+          name: editRoleName.trim(),
+          system_prompt: editRolePrompt.trim(),
+        })
       }
-      addToast('已保存', 'success')
-      loadColleagues()
+      addToast("已保存", "success")
+      loadRoles()
     } catch (e) {
-      addToast('保存失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+      addToast("保存失败: " + (e instanceof Error ? e.message : String(e)), "error")
     } finally {
-      setEditSaving(false)
+      setRoleSaving(false)
     }
-  }, [selectedColleagueId, editNickname, editRole, editModel, editSystemPrompt, editCapabilities, addToast, loadColleagues])
+  }, [selectedRoleId, editRoleName, editRolePrompt, addToast, loadRoles])
 
-  const handleDeleteColleague = useCallback(async () => {
-    if (!deleteConfirm) { setDeleteConfirm(true); return }
+  const handleDeleteRole = useCallback(async () => {
+    if (!roleDeleteConfirm) { setRoleDeleteConfirm(true); return }
     try {
-      await window.electron.invoke('ai:delete', selectedColleagueId as string)
-      setSelectedColleagueId(null)
-      loadColleagues()
+      await window.electron.invoke("ai:role-delete", selectedRoleId as string)
+      setSelectedRoleId(null)
+      loadRoles()
     } catch (e) {
-      addToast('删除失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+      addToast("删除失败: " + (e instanceof Error ? e.message : String(e)), "error")
     }
-  }, [deleteConfirm, selectedColleagueId, addToast, loadColleagues])
-
-  const handleAddCap = useCallback(() => {
-    const v = capInput.trim()
-    if (v && !editCapabilities.includes(v)) {
-      setEditCapabilities(prev => [...prev, v])
-    }
-    setCapInput('')
-  }, [capInput, editCapabilities])
-
-  const handleRemoveCap = useCallback((cap: string) => {
-    setEditCapabilities(prev => prev.filter(c => c !== cap))
-  }, [])
+  }, [roleDeleteConfirm, selectedRoleId, addToast, loadRoles])
 
   const handleSaveApi = useCallback((e: FormEvent) => {
     e.preventDefault()
@@ -301,16 +258,19 @@ export function SettingsView(): React.ReactElement {
       ? "https://api.deepseek.com"
       : "https://api.openai.com/v1"
 
+  const selectedRole = roles.find((r) => r.id === selectedRoleId)
+  const isSystemRole = selectedRole?.is_system === 1
+
   return (
     <div className="flex-1 p-6">
       <h1 className="text-base font-semibold mb-1">设置</h1>
-      <p className="text-[13px] text-[var(--text-secondary)] mb-6">配置 API Key、GitHub 集成和管理 AI 同事</p>
+      <p className="text-[13px] text-[var(--text-secondary)] mb-6">配置 API Key、GitHub 集成和管理 AI 岗位</p>
 
       <Tabs value={tab} onValueChange={(v: string) => setTab(v as TabValue)}>
         <TabsList>
           <TabsTrigger value="api">API 配置</TabsTrigger>
           <TabsTrigger value="github">GitHub 集成</TabsTrigger>
-          <TabsTrigger value="colleagues">AI 同事管理</TabsTrigger>
+          <TabsTrigger value="roles">岗位管理</TabsTrigger>
         </TabsList>
 
         <TabsContent value="api">
@@ -413,7 +373,6 @@ export function SettingsView(): React.ReactElement {
               <p className={cardTitleClass + " mb-1"}>自定义模型</p>
               <p className={cardDescClass + " mb-3"}>手动添加任意模型 ID（如本地 Ollama、第三方接口等）</p>
 
-              {/* Add Model Input */}
               <div className="flex gap-2 mb-3">
                 <Input
                   value={newModelId}
@@ -439,7 +398,6 @@ export function SettingsView(): React.ReactElement {
                 </Button>
               </div>
 
-              {/* Custom Model List */}
               {customModels.length > 0 ? (
                 <div className="space-y-1">
                   {customModels.map((m) => (
@@ -531,146 +489,162 @@ export function SettingsView(): React.ReactElement {
           </div>
         </TabsContent>
 
-        <TabsContent value="colleagues">
+        <TabsContent value="roles">
           <div className="flex gap-4" style={{ minHeight: 400 }}>
-            {/* Left: colleague list */}
+            {/* Left: role list */}
             <div className={cardClass + " w-56 shrink-0 flex flex-col"}>
               <div className="flex items-center justify-between mb-3">
-                <p className={cardTitleClass}>AI 同事</p>
+                <p className={cardTitleClass}>岗位列表</p>
                 <button
                   type="button"
-                  onClick={handleNewColleague}
+                  onClick={handleNewRole}
                   className="text-[12px] text-[var(--accent)] hover:text-[var(--accent-hover)] font-medium"
                 >
                   + 新建
                 </button>
               </div>
-              {colleaguesLoading ? (
+
+              {rolesLoading ? (
                 <p className="text-[var(--text-muted)] text-[12px] py-4 text-center">加载中...</p>
-              ) : colleagues.length === 0 ? (
-                <p className="text-[var(--text-muted)] text-[12px] py-4 text-center">暂无同事</p>
               ) : (
                 <div className="flex flex-col gap-0.5 flex-1 overflow-y-auto">
-                  {colleagues.map((c) => (
+                  {/* system-manager pinned at top */}
+                  {roles.filter((r) => r.is_system === 1).map((r) => (
                     <button
-                      key={c.id}
+                      key={r.id}
                       type="button"
-                      onClick={() => handleSelectColleague(c)}
+                      onClick={() => handleSelectRole(r)}
                       className={[
                         "flex items-center gap-2 py-2 px-2 rounded-md text-left transition-colors w-full",
-                        selectedColleagueId === c.id
+                        selectedRoleId === r.id
+                          ? "bg-[var(--accent)] text-white"
+                          : "hover:bg-[var(--bg-base)] text-[var(--text-primary)]",
+                      ].join(" ")}
+                    >
+                      <div className={[
+                        "w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-base",
+                        selectedRoleId === r.id ? "bg-white/20" : "bg-[var(--ai-muted)]",
+                      ].join(" ")}>
+                        👑
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-medium truncate">{r.name}</p>
+                        <p className={[
+                          "text-[11px]",
+                          selectedRoleId === r.id ? "text-white/70" : "text-[var(--text-muted)]",
+                        ].join(" ")}>系统角色</p>
+                      </div>
+                    </button>
+                  ))}
+
+                  {/* Regular roles */}
+                  {roles.filter((r) => r.is_system !== 1).map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => handleSelectRole(r)}
+                      className={[
+                        "flex items-center gap-2 py-2 px-2 rounded-md text-left transition-colors w-full",
+                        selectedRoleId === r.id
                           ? "bg-[var(--accent)] text-white"
                           : "hover:bg-[var(--bg-base)] text-[var(--text-primary)]",
                       ].join(" ")}
                     >
                       <div className={[
                         "w-7 h-7 rounded-md flex items-center justify-center shrink-0",
-                        selectedColleagueId === c.id ? "bg-white/20" : getAvatarClass(c.name),
+                        selectedRoleId === r.id ? "bg-white/20" : "bg-[var(--bg-base)]",
                       ].join(" ")}>
-                        <span className="text-white text-[11px] font-semibold">{(c.nickname || c.name).charAt(0)}</span>
+                        <span className={[
+                          "text-[11px] font-semibold",
+                          selectedRoleId === r.id ? "text-white" : "text-[var(--text-muted)]",
+                        ].join(" ")}>
+                          {r.name.charAt(0)}
+                        </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-medium truncate">{c.nickname || c.name}</p>
-                        <div className="flex items-center gap-1">
-                          <span className={["w-1.5 h-1.5 rounded-full shrink-0", selectedColleagueId === c.id ? "bg-white/70" : statusDot(c.status)].join(" ")} />
-                          <span className={"text-[11px] " + (selectedColleagueId === c.id ? "text-white/70" : "text-[var(--text-muted)]")}>{statusLabel(c.status)}</span>
-                        </div>
+                        <p className="text-[12.5px] font-medium truncate">{r.name}</p>
                       </div>
                     </button>
                   ))}
+
+                  {roles.length === 0 && (
+                    <p className="text-[var(--text-muted)] text-[12px] py-4 text-center">暂无岗位</p>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Right: edit panel */}
-            {selectedColleagueId ? (
+            {selectedRoleId ? (
               <div className={cardClass + " flex-1 flex flex-col gap-4"}>
-                <p className={cardTitleClass}>{selectedColleagueId === 'new' ? '新建同事' : '编辑同事'}</p>
+                <p className={cardTitleClass}>
+                  {selectedRoleId === "new" ? "新建岗位" : isSystemRole ? "编辑系统角色" : "编辑岗位"}
+                </p>
 
-                {/* Nickname */}
+                {/* Role name */}
                 <div className="space-y-1">
-                  <label className={labelClass}>昵称</label>
-                  <Input value={editNickname} onChange={(e) => setEditNickname(e.target.value)} placeholder="留空则显示角色名" />
-                </div>
-
-                {/* Role */}
-                <div className="space-y-1">
-                  <label className={labelClass}>角色 <span className="text-[var(--danger)]">*</span></label>
-                  <Input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="如：全栈工程师" />
-                </div>
-
-                {/* Model override */}
-                <div className="space-y-1">
-                  <label className={labelClass}>使用模型</label>
-                  <Select key={selectedColleagueId} value={editModel || "__inherit__"} onValueChange={(v) => setEditModel(v === "__inherit__" ? "" : v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="继承全局默认" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__inherit__">继承全局默认</SelectItem>
-                      {allModels.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <label className={labelClass}>
+                    岗位名称 <span className="text-[var(--danger)]">*</span>
+                  </label>
+                  <Input
+                    value={editRoleName}
+                    onChange={(e) => setEditRoleName(e.target.value)}
+                    placeholder="如：全栈工程师"
+                    disabled={isSystemRole}
+                    className={isSystemRole ? "opacity-60 cursor-not-allowed" : ""}
+                  />
+                  {isSystemRole && (
+                    <p className="text-[11px] text-[var(--text-muted)]">系统角色名称不可修改</p>
+                  )}
                 </div>
 
                 {/* System prompt */}
                 <div className="space-y-1 flex flex-col flex-1">
-                  <label className={labelClass}>系统提示词 <span className="text-[var(--danger)]">*</span></label>
+                  <label className={labelClass}>系统提示词</label>
                   <textarea
-                    value={editSystemPrompt}
-                    onChange={(e) => setEditSystemPrompt(e.target.value)}
-                    placeholder="描述该 AI 同事的行为和能力..."
-                    rows={6}
-                    className="w-full rounded-md border border-[var(--border-default)] bg-transparent px-3 py-2 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                    value={editRolePrompt}
+                    onChange={(e) => setEditRolePrompt(e.target.value)}
+                    placeholder="描述该岗位的职责和行为规范..."
+                    rows={8}
+                    className="w-full rounded-md border border-[var(--border-default)] bg-transparent px-3 py-2 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none focus:outline-none focus:ring-1 focus:ring-[var(--accent)] flex-1"
                   />
-                </div>
-
-                {/* Capabilities */}
-                <div className="space-y-1">
-                  <label className={labelClass}>能力标签</label>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {editCapabilities.map((cap) => (
-                      <span key={cap} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--ai-muted)] text-[var(--ai)] text-[11.5px] font-medium">
-                        {cap}
-                        <button type="button" onClick={() => handleRemoveCap(cap)} className="text-[var(--ai)] hover:text-[var(--danger)] leading-none">×</button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      value={capInput}
-                      onChange={(e) => setCapInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCap())}
-                      placeholder="添加标签，回车确认"
-                      className="flex-1 text-[13px]"
-                    />
-                    <Button type="button" onClick={handleAddCap} disabled={!capInput.trim()} className="shrink-0 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white px-3">
-                      添加
-                    </Button>
-                  </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-default)]">
                   <Button
                     type="button"
-                    onClick={handleSaveColleague}
-                    disabled={editSaving || !editRole.trim() || !editSystemPrompt.trim()}
+                    onClick={handleSaveRole}
+                    disabled={roleSaving || !editRoleName.trim()}
                     className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white"
                   >
-                    {editSaving ? '保存中...' : '保存'}
+                    {roleSaving ? "保存中..." : "保存"}
                   </Button>
-                  {selectedColleagueId !== 'new' && (
-                    deleteConfirm ? (
+                  {!isSystemRole && selectedRoleId !== "new" && (
+                    roleDeleteConfirm ? (
                       <div className="flex items-center gap-2">
                         <span className="text-[12px] text-[var(--danger)]">确认删除？</span>
-                        <button type="button" onClick={handleDeleteColleague} className="text-[12px] text-[var(--danger)] hover:underline font-medium">确认</button>
-                        <button type="button" onClick={() => setDeleteConfirm(false)} className="text-[12px] text-[var(--text-muted)] hover:underline">取消</button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteRole}
+                          className="text-[12px] text-[var(--danger)] hover:underline font-medium"
+                        >
+                          确认
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRoleDeleteConfirm(false)}
+                          className="text-[12px] text-[var(--text-muted)] hover:underline"
+                        >
+                          取消
+                        </button>
                       </div>
                     ) : (
-                      <button type="button" onClick={handleDeleteColleague} className="text-[12px] text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors">
+                      <button
+                        type="button"
+                        onClick={handleDeleteRole}
+                        className="text-[12px] text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
+                      >
                         删除
                       </button>
                     )
@@ -679,7 +653,7 @@ export function SettingsView(): React.ReactElement {
               </div>
             ) : (
               <div className={cardClass + " flex-1 flex items-center justify-center"}>
-                <p className="text-[13px] text-[var(--text-muted)]">选择一位同事编辑，或新建同事</p>
+                <p className="text-[13px] text-[var(--text-muted)]">选择一个岗位编辑，或新建岗位</p>
               </div>
             )}
           </div>

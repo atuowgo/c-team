@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell"
 import { useAppStore } from "@/stores/app-store"
 import { ChannelView } from "@/components/views/ChannelView"
 import { BoardView } from "@/components/views/BoardView"
+import { EmployeeView } from "@/components/views/EmployeeView"
 import { SettingsView } from "@/components/views/SettingsView"
 import { StatusBar } from "@/components/StatusBar"
 import { Toaster } from "@/components/ui/toaster"
@@ -14,6 +15,8 @@ function MainContent(): React.ReactElement {
       return <ChannelView />
     case "board":
       return <BoardView />
+    case "employees":
+      return <EmployeeView />
     case "settings":
       return <SettingsView />
   }

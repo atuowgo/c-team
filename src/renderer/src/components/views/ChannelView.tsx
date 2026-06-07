@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
+import { useAppStore } from "@/stores/app-store"
 import type { ChannelData, MessageData, AiColleagueData } from "@common/ipc"
 import { Hash, Plus, X, Send, MessageSquare } from "lucide-react"
 import { AvatarGradient } from "@/components/ui/avatar"
@@ -56,11 +57,10 @@ export function ChannelView(): React.ReactElement {
   // Feature 2: Reply-To / Quote Reply
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [replyToContent, setReplyToContent] = useState<string>("")
-  // Feature 4: Channel Manager
-  const [channelManager, setChannelManager] = useState<AiColleagueData | null>(null)
   // Hover state for message reply buttons
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const addToast = useToastStore((s) => s.addToast)
+  const setStoreChannelId = useAppStore((s) => s.setSelectedChannelId)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -105,11 +105,6 @@ export function ChannelView(): React.ReactElement {
   useEffect(() => {
     if (!selectedChannelId) return
     loadMessages(selectedChannelId)
-    // Feature 4: fetch channel manager when channel changes
-    window.electron
-      .invoke<AiColleagueData | null>("channel:manager-get", selectedChannelId)
-      .then((manager) => setChannelManager(manager))
-      .catch(() => setChannelManager(null))
   }, [selectedChannelId, loadMessages])
 
   useEffect(() => {
@@ -263,12 +258,12 @@ export function ChannelView(): React.ReactElement {
 
   const selectChannel = useCallback((id: string) => {
     setSelectedChannelId(id)
+    setStoreChannelId(id)
     setMessages([])
     // Reset reply state when switching channels
     setReplyToId(null)
     setReplyToContent("")
-    setChannelManager(null)
-  }, [])
+  }, [setStoreChannelId])
 
   const handleCreateChannel = useCallback(() => {
     const name = newChannelName.trim()
@@ -290,6 +285,7 @@ export function ChannelView(): React.ReactElement {
         .then(() => {
           if (selectedChannelId === channelId) {
             setSelectedChannelId(null)
+            setStoreChannelId(null)
             setMessages([])
           }
           loadChannels()
@@ -402,57 +398,6 @@ export function ChannelView(): React.ReactElement {
           ))}
         </ScrollArea>
 
-        {/* Feature 4: Channel Manager in sidebar */}
-        {channelManager && (
-          <div className="px-3 py-2 border-t border-[var(--border-subtle)]">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
-              管理员
-            </p>
-            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-2 mb-2">
-              <span title="频道管理员" className="text-sm leading-none">👑</span>
-              <AvatarGradient name={channelManager.name} className="w-6 h-6 text-[10px]" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-medium text-[var(--text-primary)] truncate">
-                  {channelManager.nickname || channelManager.name}
-                </p>
-                <p className="text-[10px] text-[var(--text-muted)]">管理员</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* AI Colleagues list */}
-        {aiColleagues.length > 0 && (
-          <div className="px-3 py-2 border-t border-[var(--border-subtle)]">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
-              AI 同事
-            </p>
-            <div className="flex flex-col gap-1">
-              {aiColleagues.map((colleague) => (
-                <div key={colleague.id} className="flex items-center gap-2 py-0.5">
-                  {/* Feature 3: Status dot — idle=green, busy=amber */}
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor:
-                        colleague.status === "busy"
-                          ? "#f59e0b"
-                          : colleague.status === "idle"
-                          ? "#22c55e"
-                          : "var(--text-muted)",
-                    }}
-                  />
-                  <span className="text-[12px] text-[var(--text-secondary)] truncate flex-1">
-                    {colleague.nickname || colleague.name}
-                  </span>
-                  <span className="text-[10px] text-[var(--text-muted)] shrink-0">
-                    {colleague.status === "busy" ? "处理中" : "空闲"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Message area */}
