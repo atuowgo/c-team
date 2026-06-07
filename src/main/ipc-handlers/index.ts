@@ -19,6 +19,7 @@ export function registerIpcHandlers(): void {
     const id = randomUUID()
     db.prepare('INSERT INTO channels (id, name) VALUES (?, ?)').run(id, name)
     db.prepare('INSERT OR IGNORE INTO channel_memories (channel_id) VALUES (?)').run(id)
+    db.prepare('INSERT OR IGNORE INTO channel_members (channel_id, colleague_id) VALUES (?, ?)').run(id, 'system-manager')
     return db.prepare('SELECT * FROM channels WHERE id = ?').get(id)
   })
 
@@ -35,6 +36,30 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('channel:manager-set', (_e, channelId: string, colleagueId: string) => {
     db.prepare('INSERT OR REPLACE INTO channel_managers (channel_id, colleague_id) VALUES (?, ?)').run(channelId, colleagueId)
+    return { success: true }
+  })
+
+  ipcMain.handle('channel:members-list', (_e, channelId: string) => {
+    const members = db.prepare('SELECT * FROM channel_members WHERE channel_id = ?').all(channelId) as Array<{ channel_id: string; colleague_id: string; joined_at: string }>
+    return members.map((m) => {
+      if (m.colleague_id === 'system-manager') {
+        const role = db.prepare("SELECT * FROM ai_roles WHERE id = 'system-manager'").get() as { name: string } | undefined
+        return { ...m, name: role?.name ?? '频道管理员', nickname: null, role_name: '频道管理员', status: 'idle', type: 'manager' }
+      }
+      const c = db.prepare('SELECT c.*, r.name as role_name FROM ai_colleagues c LEFT JOIN ai_roles r ON c.role_id = r.id WHERE c.id = ?').get(m.colleague_id) as Record<string, unknown> | undefined
+      if (!c) return null
+      return { ...m, name: c.name, nickname: c.nickname ?? null, role_name: c.role_name ?? c.role, status: c.status, type: 'colleague' }
+    }).filter(Boolean)
+  })
+
+  ipcMain.handle('channel:members-add', (_e, channelId: string, colleagueId: string) => {
+    db.prepare('INSERT OR IGNORE INTO channel_members (channel_id, colleague_id) VALUES (?, ?)').run(channelId, colleagueId)
+    return { success: true }
+  })
+
+  ipcMain.handle('channel:members-remove', (_e, channelId: string, colleagueId: string) => {
+    if (colleagueId === 'system-manager') throw new Error('不能移除频道管理员')
+    db.prepare('DELETE FROM channel_members WHERE channel_id = ? AND colleague_id = ?').run(channelId, colleagueId)
     return { success: true }
   })
 
@@ -240,10 +265,11 @@ export function registerIpcHandlers(): void {
     return db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(id) ?? null
   })
 
-  ipcMain.handle('ai:create', (_e, data: { name: string; role: string; system_prompt: string; capabilities?: string[]; model?: string | null; nickname?: string | null }) => {
+  ipcMain.handle('ai:create', (_e, data: { name: string; role: string; system_prompt: string; capabilities?: string[]; model?: string | null; nickname?: string | null; type?: string }) => {
     const id = randomUUID()
     const capabilities = data.capabilities ? JSON.stringify(data.capabilities) : '[]'
-    db.prepare('INSERT INTO ai_colleagues (id, name, role, system_prompt, capabilities, status, model, nickname) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.name, data.role, data.system_prompt, capabilities, 'idle', data.model ?? null, data.nickname ?? null)
+    const type = data.type ?? 'colleague'
+    db.prepare('INSERT INTO ai_colleagues (id, name, role, system_prompt, capabilities, status, model, nickname, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.name, data.role, data.system_prompt, capabilities, 'idle', data.model ?? null, data.nickname ?? null, type)
     return db.prepare('SELECT * FROM ai_colleagues WHERE id = ?').get(id)
   })
 
@@ -270,7 +296,40 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('ai:delete', (_e, id: string) => {
+    const row = db.prepare("SELECT type FROM ai_colleagues WHERE id = ?").get(id) as { type: string } | undefined
+    if (row?.type === 'manager') throw new Error('频道管理员不可删除')
     db.prepare('DELETE FROM ai_colleagues WHERE id = ?').run(id)
+    return { success: true }
+  })
+
+  // --- AI Roles ---
+
+  ipcMain.handle('ai:role-list', () => {
+    return db.prepare('SELECT * FROM ai_roles ORDER BY is_system DESC, rowid').all()
+  })
+
+  ipcMain.handle('ai:role-create', (_e, data: { name: string; system_prompt: string }) => {
+    const id = randomUUID()
+    db.prepare('INSERT INTO ai_roles (id, name, system_prompt) VALUES (?, ?, ?)').run(id, data.name, data.system_prompt)
+    return db.prepare('SELECT * FROM ai_roles WHERE id = ?').get(id)
+  })
+
+  ipcMain.handle('ai:role-update', (_e, id: string, data: { name?: string; system_prompt?: string }) => {
+    const sets: string[] = []
+    const values: unknown[] = []
+    if (data.name !== undefined) { sets.push('name = ?'); values.push(data.name) }
+    if (data.system_prompt !== undefined) { sets.push('system_prompt = ?'); values.push(data.system_prompt) }
+    if (sets.length === 0) return db.prepare('SELECT * FROM ai_roles WHERE id = ?').get(id)
+    values.push(id)
+    db.prepare(`UPDATE ai_roles SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+    return db.prepare('SELECT * FROM ai_roles WHERE id = ?').get(id)
+  })
+
+  ipcMain.handle('ai:role-delete', (_e, id: string) => {
+    const role = db.prepare('SELECT is_system FROM ai_roles WHERE id = ?').get(id) as { is_system: number } | undefined
+    if (role?.is_system) throw new Error('系统内置岗位不可删除')
+    db.prepare('UPDATE ai_colleagues SET role_id = NULL WHERE role_id = ?').run(id)
+    db.prepare('DELETE FROM ai_roles WHERE id = ?').run(id)
     return { success: true }
   })
 
