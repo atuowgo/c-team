@@ -39,14 +39,14 @@ export async function startProgrammingSession(taskId: string): Promise<void> {
            WHERE cm.channel_id = ? AND cm.colleague_id != 'system-manager'`
         ).all(channelId) as Array<{ name: string; nickname: string | null; role_name: string; role_description: string | null; personal_notes: string | null }>
         if (members.length > 0) {
-          teamInfo = '\n\n你的团队成员（分配任务时必须使用下列 @ 后的精确名称，不得修改或添加任何修饰词）：\n' +
-            members.map((m) => {
-              const displayName = m.nickname || m.name
-              const desc = m.role_description ? m.role_description : ''
-              const notes = m.personal_notes ? `；${m.personal_notes}` : ''
-              return `- @${displayName}【${m.role_name}】${desc}${notes}`
-            }).join('\n') +
-            '\n根据任务内容匹配最合适的成员，@提及时只能使用上面列出的精确名称。'
+          const memberLines = members.map((m) => {
+            const displayName = m.nickname || m.name
+            const desc = m.role_description ? m.role_description : ''
+            const notes = m.personal_notes ? `；${m.personal_notes}` : ''
+            return `  - 成员名：${displayName}（必须写作 @${displayName}）\n    岗位：${m.role_name}${desc ? `\n    职责：${desc}` : ''}${notes ? `\n    备注：${notes}` : ''}`
+          }).join('\n')
+          const allowedNames = members.map((m) => `@${m.nickname || m.name}`).join('、')
+          teamInfo = `\n\n【团队成员 - 严格约束】\n你频道内的可用成员如下，分配任务时只能 @ 下列名称，禁止使用任何不在列表中的名字（如 @Developer、@Backend、@用户 等均为违规）：\n\n${memberLines}\n\n允许使用的 @ 名称（完整列表）：${allowedNames}\n违规示例（禁止）：@Developer、@Tester、@JavaDev、@Backend、@Frontend、@用户\n合规示例（必须）：${allowedNames}`
         }
       }
       const managerColleague = {
