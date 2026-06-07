@@ -127,6 +127,11 @@ const migrations: Migration[] = [
   `
   },
   {
+    version: 6,
+    name: 'colleague_type',
+    sql: `ALTER TABLE ai_colleagues ADD COLUMN type TEXT NOT NULL DEFAULT 'colleague';`
+  },
+  {
     version: 5,
     name: 'memory_and_features',
     sql: `
@@ -168,6 +173,48 @@ const migrations: Migration[] = [
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+  `
+  },
+  {
+    version: 7,
+    name: 'roles_and_channel_members',
+    sql: `
+    CREATE TABLE IF NOT EXISTS ai_roles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      system_prompt TEXT NOT NULL DEFAULT '',
+      is_system INTEGER NOT NULL DEFAULT 0
+    );
+
+    INSERT OR IGNORE INTO ai_roles (id, name, system_prompt, is_system)
+    VALUES (
+      'system-manager',
+      '频道管理员',
+      '你是团队的频道管理员，负责理解用户需求并协调团队成员完成任务。你是 Planner，其他同事是 Executor。需要分配任务时，用 @姓名 方式指派给对应成员。',
+      1
+    );
+
+    UPDATE ai_roles SET system_prompt = (
+      SELECT system_prompt FROM ai_colleagues WHERE type = 'manager' LIMIT 1
+    ) WHERE id = 'system-manager' AND EXISTS (SELECT 1 FROM ai_colleagues WHERE type = 'manager');
+
+    INSERT OR IGNORE INTO ai_roles (id, name, system_prompt, is_system)
+    VALUES ('role-default', '默认岗位', '你是一名 AI 助手，协助完成分配给你的任务。', 0);
+
+    ALTER TABLE ai_colleagues ADD COLUMN role_id TEXT REFERENCES ai_roles(id);
+    ALTER TABLE ai_colleagues ADD COLUMN personal_notes TEXT;
+
+    UPDATE ai_colleagues SET role_id = 'role-default' WHERE type != 'manager' AND role_id IS NULL;
+
+    CREATE TABLE IF NOT EXISTS channel_members (
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      colleague_id TEXT NOT NULL,
+      joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (channel_id, colleague_id)
+    );
+
+    INSERT OR IGNORE INTO channel_members (channel_id, colleague_id)
+    SELECT channel_id, 'system-manager' FROM channel_managers;
   `
   }
 ]
