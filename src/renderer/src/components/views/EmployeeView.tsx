@@ -334,7 +334,10 @@ export function EmployeeView(): React.ReactElement {
           </div>
         ) : (
           <div className={cardClass + " flex-1 flex items-center justify-center"}>
-            <p className="text-[13px] text-[var(--text-muted)]">选择一位员工编辑，或新建员工</p>
+            <p className="text-[13px] text-[var(--text-muted)]">
+              选择一位员工编辑，或
+              <button type="button" onClick={handleNew} className="text-[var(--accent)] hover:underline">新建员工</button>
+            </p>
           </div>
         )}
       </div>

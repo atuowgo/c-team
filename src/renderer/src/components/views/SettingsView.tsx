@@ -653,7 +653,10 @@ export function SettingsView(): React.ReactElement {
               </div>
             ) : (
               <div className={cardClass + " flex-1 flex items-center justify-center"}>
-                <p className="text-[13px] text-[var(--text-muted)]">选择一个岗位编辑，或新建岗位</p>
+                <p className="text-[13px] text-[var(--text-muted)]">
+                  选择一个岗位编辑，或
+                  <button type="button" onClick={handleNewRole} className="text-[var(--accent)] hover:underline">新建岗位</button>
+                </p>
               </div>
             )}
           </div>
