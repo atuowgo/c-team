@@ -76,7 +76,28 @@ export interface AiColleagueData {
   current_task: string | null
   model: string | null
   nickname: string | null
+  type: string
   created_at: string
+  role_id: string | null
+  personal_notes: string | null
+}
+
+export interface AiRoleData {
+  id: string
+  name: string
+  system_prompt: string
+  is_system: number
+}
+
+export interface ChannelMemberData {
+  channel_id: string
+  colleague_id: string
+  joined_at: string
+  name?: string
+  nickname?: string | null
+  role_name?: string
+  status?: string
+  type?: string
 }
 
 export interface ChannelManagerData { channelId: string; colleague: AiColleagueData | null }
@@ -88,6 +109,9 @@ export interface AiColleagueCreateData {
   capabilities?: string[]
   model?: string | null
   nickname?: string | null
+  type?: string
+  role_id?: string | null
+  personal_notes?: string | null
 }
 
 export interface AiTaskData {
@@ -132,6 +156,9 @@ export interface IpcEvents {
   'channel:delete': (id: string) => { success: boolean }
   'channel:manager-get': (channelId: string) => AiColleagueData | null
   'channel:manager-set': (channelId: string, colleagueId: string) => { success: boolean }
+  'channel:members-list': (channelId: string) => ChannelMemberData[]
+  'channel:members-add': (channelId: string, colleagueId: string) => { success: boolean }
+  'channel:members-remove': (channelId: string, colleagueId: string) => { success: boolean }
 
   // Messages
   'message:list': (channelId: string) => MessageData[]
@@ -163,6 +190,12 @@ export interface IpcEvents {
   'ai:update': (id: string, data: Partial<AiColleagueCreateData>) => AiColleagueData
   'ai:delete': (id: string) => { success: boolean }
   'ai:status': (id: string) => AiColleagueData | null
+
+  // AI Roles
+  'ai:role-list': () => AiRoleData[]
+  'ai:role-create': (data: { name: string; system_prompt: string }) => AiRoleData
+  'ai:role-update': (id: string, data: { name?: string; system_prompt?: string }) => AiRoleData
+  'ai:role-delete': (id: string) => { success: boolean }
 
   // AI Task Queue
   'ai:task-list': (filters?: { colleagueId?: string; status?: string }) => AiTaskResult[]
