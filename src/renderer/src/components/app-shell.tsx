@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { AvatarGradient } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import type { AiColleagueData, ChannelMemberData } from "@common/ipc"
-import { Hash, LayoutGrid, Users, Settings, Sun, Moon, ChevronLeft, ChevronRight, UserPlus } from "lucide-react"
+import { Hash, LayoutGrid, Users, Settings, Sun, Moon, ChevronLeft, ChevronRight, UserPlus, Puzzle } from "lucide-react"
 
 function getStatusDot(status: string) {
   const map: Record<string, string> = {
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { view: "channel", icon: Hash, label: "频道" },
   { view: "board", icon: LayoutGrid, label: "看板" },
   { view: "employees", icon: Users, label: "员工管理" },
+  { view: "skills", icon: Puzzle, label: "技能管理" },
   { view: "settings", icon: Settings, label: "设置" },
 ] as const
 

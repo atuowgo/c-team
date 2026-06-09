@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type ActiveView = "channel" | "board" | "employees" | "settings"
+export type ActiveView = "channel" | "board" | "employees" | "skills" | "settings"
 
 interface AppState {
   sidebarCollapsed: boolean

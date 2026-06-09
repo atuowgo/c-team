@@ -661,6 +661,7 @@ export function SettingsView(): React.ReactElement {
             )}
           </div>
         </TabsContent>
+
       </Tabs>
     </div>
   )
