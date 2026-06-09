@@ -1,7 +1,8 @@
-import { generateText } from 'ai'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createOpenAI } from '@ai-sdk/openai'
+import { ChatAnthropic } from '@langchain/anthropic'
+import { ChatOpenAI } from '@langchain/openai'
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages'
 import { getSetting } from './settings-store'
+import { loadSkillsContext } from './skills-loader'
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
@@ -38,11 +39,36 @@ function getConfig(): LLMConfig | null {
   return { providerType, baseURL, apiKey, model }
 }
 
+function buildChatModel(config: LLMConfig, model: string, maxTokens: number) {
+  if (config.providerType === 'anthropic') {
+    return new ChatAnthropic({
+      model,
+      apiKey: config.apiKey,
+      maxTokens,
+      ...(config.baseURL ? { anthropicApiUrl: config.baseURL } : {}),
+    })
+  }
+
+  const baseURL =
+    config.providerType === 'deepseek'
+      ? config.baseURL || 'https://api.deepseek.com'
+      : config.baseURL || 'https://api.openai.com/v1'
+
+  return new ChatOpenAI({
+    model,
+    apiKey: config.apiKey,
+    maxTokens,
+    configuration: { baseURL },
+  })
+}
+
 interface CallOptions {
   maxTokens?: number
   maxRetries?: number
   timeoutMs?: number
   modelOverride?: string
+  /** 是否注入 skills 上下文（默认 false） */
+  useSkills?: boolean
 }
 
 export async function callClaude(
@@ -54,48 +80,49 @@ export async function callClaude(
   if (!config) throw new Error('AI API not configured. Please set API key in Settings.')
 
   const model = options?.modelOverride || config.model
-
-  let llmModel
-  if (config.providerType === 'anthropic') {
-    const provider = createAnthropic({
-      apiKey: config.apiKey,
-      ...(config.baseURL ? { baseURL: config.baseURL } : {}),
-    })
-    llmModel = provider(model)
-  } else if (config.providerType === 'deepseek') {
-    const provider = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.deepseek.com',
-    })
-    llmModel = provider.chat(model)
-  } else {
-    const provider = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.openai.com/v1',
-    })
-    llmModel = provider(model)
-  }
-
+  const maxTokens = options?.maxTokens ?? 4096
+  const maxRetries = options?.maxRetries ?? 3
   const timeoutMs = options?.timeoutMs ?? 120_000
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  const chatModel = buildChatModel(config, model, maxTokens)
 
   const messages: ChatMessage[] =
     typeof userMessageOrMessages === 'string'
       ? [{ role: 'user', content: userMessageOrMessages }]
       : userMessageOrMessages
 
+  // 注入 skills 上下文到 system prompt
+  let finalSystemPrompt = systemPrompt
+  if (options?.useSkills) {
+    const skillsContext = loadSkillsContext()
+    if (skillsContext) {
+      finalSystemPrompt = `${systemPrompt}\n\n${skillsContext}`
+    }
+  }
+
+  const langchainMessages = [
+    new SystemMessage(finalSystemPrompt),
+    ...messages.map((m) =>
+      m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
+    ),
+  ]
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  let lastErr: unknown
   try {
-    const { text } = await generateText({
-      model: llmModel,
-      system: systemPrompt,
-      messages,
-      maxOutputTokens: options?.maxTokens ?? 4096,
-      maxRetries: options?.maxRetries ?? 3,
-      abortSignal: controller.signal,
-    })
-    return text
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await chatModel.invoke(langchainMessages, { signal: controller.signal })
+        return typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
+      } catch (err) {
+        lastErr = err
+        if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)))
+      }
+    }
   } finally {
     clearTimeout(timeout)
   }
+  throw lastErr
 }
