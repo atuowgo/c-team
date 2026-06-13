@@ -41,6 +41,14 @@
 - **表单提交用 `form.requestSubmit()`**：CDP key dispatch（Enter）不触发 React onSubmit；正确：`document.querySelector('form').requestSubmit()`
 - **Quartz CGEventPost 合成点击被 macOS 安全机制拦截**：无障碍授权的 app 才能用，普通脚本无效，改用 CDP WebSocket 方案
 
+## Mermaid + 技能系统铁律
+
+- **mermaid 必须在渲染器进程初始化**：`mermaid.initialize()` 只能调用一次（全局），放在模块顶层；每次渲染用递增 ID 避免冲突
+- **adm-zip 必须加入 electron-vite external**：主进程 CJS 依赖需在 `rollupOptions.external` 中显式列出，否则打包失败
+- **adm-zip 在 ESM 环境用 `createRequire` 引入**：`const _require = createRequire(import.meta.url)`，不能用动态 `import()` 的 `.default`
+- **skills IPC 处理器不可缺失**：`skills:list/toggle/delete/upload` 四个处理器缺失时，SkillsView 会永远显示"加载中..."（Promise 静默 reject）
+- **CDP 验证 React 状态更新**：IPC 在组件挂载后创建的数据（频道/消息），组件不会自动更新；用 `Page.reload()` 重新挂载或 CDP 直接点击刷新按钮
+
 ## SQLite 迁移铁律
 
 - **SQLite 无法 ALTER TABLE DROP CONSTRAINT**：要删除 FK 约束，必须新建无约束表 → INSERT 数据 → DROP 旧表 → RENAME。见 Migration v8。
