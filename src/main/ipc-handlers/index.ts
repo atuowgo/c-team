@@ -1,10 +1,60 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
+import { createRequire } from 'module'
+import { existsSync, readdirSync, readFileSync, statSync, rmSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { getDatabase } from '../database'
 import { getSetting, setSetting } from '../settings-store'
 import { approvePlan, rejectPlan } from '../planning-phase'
 import { startCodingPhase } from '../programming-session'
 import type { ModelEntry } from '../../common/ipc'
+
+const _require = createRequire(import.meta.url)
+
+// ---- Skills helpers ----
+function getSkillsDir(): string {
+  return join(process.cwd(), 'skills')
+}
+
+interface SkillFileMeta {
+  name: string
+  description: string
+  body: string
+}
+
+function parseSkillMd(content: string): SkillFileMeta | null {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  if (!match) return null
+  const fm = match[1]
+  const body = match[2].trim()
+  const nameM = fm.match(/^name:\s*(.+)$/m)
+  const descM = fm.match(/^description:\s*(.+)$/m)
+  if (!nameM || !descM) return null
+  return { name: nameM[1].trim(), description: descM[1].trim(), body }
+}
+
+function listSkillsFromFs(): Array<SkillFileMeta & { enabled: boolean; installedAt: string }> {
+  const dir = getSkillsDir()
+  if (!existsSync(dir)) return []
+  const disabledSkills = (getSetting('disabledSkills') as string[] | null) || []
+  const results: Array<SkillFileMeta & { enabled: boolean; installedAt: string }> = []
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const skillMdPath = join(dir, entry.name, 'SKILL.md')
+    if (!existsSync(skillMdPath)) continue
+    const content = readFileSync(skillMdPath, 'utf-8')
+    const meta = parseSkillMd(content)
+    if (!meta) continue
+    const stat = statSync(skillMdPath)
+    results.push({
+      ...meta,
+      enabled: !disabledSkills.includes(meta.name),
+      installedAt: stat.birthtime.toLocaleDateString('zh-CN'),
+    })
+  }
+  return results
+}
 
 export function registerIpcHandlers(): void {
   const db = getDatabase()
@@ -423,5 +473,58 @@ export function registerIpcHandlers(): void {
     const updated = custom.filter((m) => m.id !== id)
     setSetting('customModels', updated)
     return updated
+  })
+
+  // --- Skills ---
+
+  ipcMain.handle('skills:list', () => {
+    return listSkillsFromFs()
+  })
+
+  ipcMain.handle('skills:toggle', (_e, { name, enabled }: { name: string; enabled: boolean }) => {
+    const disabled = (getSetting('disabledSkills') as string[] | null) || []
+    const next = enabled ? disabled.filter((n) => n !== name) : [...new Set([...disabled, name])]
+    setSetting('disabledSkills', next)
+    return { success: true }
+  })
+
+  ipcMain.handle('skills:delete', (_e, name: string) => {
+    const dir = getSkillsDir()
+    const skillDir = join(dir, name)
+    if (existsSync(skillDir)) rmSync(skillDir, { recursive: true, force: true })
+    return { success: true }
+  })
+
+  ipcMain.handle('skills:upload', (_e, { filename: _filename, buffer }: { filename: string; buffer: number[] }) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const AdmZip = _require('adm-zip') as any
+      const zipBuf = Buffer.from(buffer)
+      const zip = new AdmZip(zipBuf)
+      const entries = zip.getEntries()
+
+      // Find SKILL.md inside the zip
+      const skillEntry = entries.find((e) => e.entryName.endsWith('SKILL.md'))
+      if (!skillEntry) return { success: false, error: 'ZIP 中未找到 SKILL.md 文件' }
+
+      const content = skillEntry.getData().toString('utf-8')
+      const meta = parseSkillMd(content)
+      if (!meta) return { success: false, error: 'SKILL.md 格式无效（需要 YAML frontmatter: name, description）' }
+
+      const skillDir = join(getSkillsDir(), meta.name)
+      mkdirSync(skillDir, { recursive: true })
+      writeFileSync(join(skillDir, 'SKILL.md'), content, 'utf-8')
+
+      return {
+        success: true,
+        skill: {
+          ...meta,
+          enabled: true,
+          installedAt: new Date().toLocaleDateString('zh-CN'),
+        },
+      }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 }

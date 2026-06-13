@@ -13,24 +13,209 @@ import { cn } from "@/lib/utils"
 import { useToastStore } from "@/stores/toast-store"
 import { useAppStore } from "@/stores/app-store"
 import type { ChannelData, MessageData, AiColleagueData, ChannelMemberData } from "@common/ipc"
-import { Hash, Plus, X, Send, MessageSquare } from "lucide-react"
+import { Hash, Plus, X, Send, MessageSquare, ChevronDown, ChevronRight, Wrench } from "lucide-react"
 import { AvatarGradient } from "@/components/ui/avatar"
+import mermaid from "mermaid"
 
-const SYSTEM_MANAGER_MENTION: AiColleagueData = {
-  id: 'system-manager',
-  name: '频道管理员',
-  nickname: '频道管理员',
-  role: '频道管理员',
-  system_prompt: '',
-  capabilities: '[]',
-  status: 'idle',
-  current_task: null,
-  model: null,
-  type: 'manager',
-  created_at: '',
-  role_id: null,
-  personal_notes: null,
+// ────────────────────────────────────────────
+// Mermaid 初始化（渲染器进程单次执行）
+// ────────────────────────────────────────────
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "default",
+  securityLevel: "loose",
+  fontFamily: "inherit",
+})
+
+// ────────────────────────────────────────────
+// 消息内容解析工具
+// ────────────────────────────────────────────
+
+interface ParsedMessage {
+  skill: string | null
+  thinking: string | null
+  body: string
 }
+
+function parseMessageContent(raw: string): ParsedMessage {
+  let content = raw.trim()
+  let skill: string | null = null
+  let thinking: string | null = null
+
+  // 提取 [SKILL: name] 前缀（行首）
+  const skillMatch = content.match(/^\[SKILL:\s*([^\]]+)\]\s*\n?/i)
+  if (skillMatch) {
+    skill = skillMatch[1].trim()
+    content = content.slice(skillMatch[0].length).trim()
+  }
+
+  // 提取 <think>...</think> 块（允许多行）
+  const thinkMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*\n?/i)
+  if (thinkMatch) {
+    thinking = thinkMatch[1].trim()
+    content = content.slice(thinkMatch[0].length).trim()
+  }
+
+  return { skill, thinking, body: content }
+}
+
+// ────────────────────────────────────────────
+// Mermaid 渲染组件
+// ────────────────────────────────────────────
+
+let mermaidCounter = 0
+
+function MermaidBlock({ code }: { code: string }): React.ReactElement {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [rendered, setRendered] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const id = `mermaid-${++mermaidCounter}`
+    setError(null)
+    setRendered(false)
+
+    mermaid.render(id, code)
+      .then(({ svg }) => {
+        if (cancelled || !containerRef.current) return
+        containerRef.current.innerHTML = svg
+        setRendered(true)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : String(err))
+        setRendered(true)
+      })
+
+    return () => { cancelled = true }
+  }, [code])
+
+  if (error) {
+    return (
+      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 my-2">
+        <p className="text-xs text-destructive font-mono mb-1">图表渲染失败</p>
+        <pre className="text-xs text-[var(--text-muted)] whitespace-pre-wrap break-all">{code}</pre>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        "my-2 rounded-md border border-[var(--border-subtle)] bg-white dark:bg-white/5 p-3 overflow-x-auto transition-opacity",
+        rendered ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div ref={containerRef} />
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────
+// 消息正文渲染（普通文本 + Mermaid 块混排）
+// ────────────────────────────────────────────
+
+interface BodySegment {
+  type: "text" | "mermaid"
+  content: string
+}
+
+function splitBodySegments(body: string): BodySegment[] {
+  const segments: BodySegment[] = []
+  const mermaidRe = /```mermaid\n([\s\S]*?)```/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+
+  while ((match = mermaidRe.exec(body)) !== null) {
+    if (match.index > lastIdx) {
+      segments.push({ type: "text", content: body.slice(lastIdx, match.index) })
+    }
+    segments.push({ type: "mermaid", content: match[1].trim() })
+    lastIdx = match.index + match[0].length
+  }
+  if (lastIdx < body.length) {
+    segments.push({ type: "text", content: body.slice(lastIdx) })
+  }
+  return segments
+}
+
+function MessageBody({
+  body,
+  colleagueNames,
+}: {
+  body: string
+  colleagueNames: string[]
+}): React.ReactElement {
+  const segments = splitBodySegments(body)
+
+  return (
+    <>
+      {segments.map((seg, i) => {
+        if (seg.type === "mermaid") {
+          return <MermaidBlock key={i} code={seg.content} />
+        }
+        return (
+          <p
+            key={i}
+            className="text-[13.5px] leading-relaxed text-[var(--text-primary)] break-words whitespace-pre-wrap"
+          >
+            {highlightMentions(seg.content, colleagueNames)}
+          </p>
+        )
+      })}
+    </>
+  )
+}
+
+// ────────────────────────────────────────────
+// 思考过程折叠组件
+// ────────────────────────────────────────────
+
+function ThinkingBlock({ thinking }: { thinking: string }): React.ReactElement {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mb-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+      >
+        {open ? (
+          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+        )}
+        <span className="font-medium">思考过程</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--border-subtle)]">
+          <p className="text-[12px] leading-relaxed text-[var(--text-muted)] whitespace-pre-wrap">
+            {thinking}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────
+// 技能标签徽章
+// ────────────────────────────────────────────
+
+function SkillBadge({ skill }: { skill: string }): React.ReactElement {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-[var(--ai)]/10 text-[var(--ai)] border border-[var(--ai)]/20 mb-1.5">
+      <Wrench className="w-3 h-3" />
+      {skill}
+    </span>
+  )
+}
+
+// ────────────────────────────────────────────
+// @提及高亮
+// ────────────────────────────────────────────
 
 function highlightMentions(content: string, colleagueNames: string[]): React.ReactNode[] {
   if (colleagueNames.length === 0) return [content]
@@ -56,6 +241,30 @@ function highlightMentions(content: string, colleagueNames: string[]): React.Rea
   return parts
 }
 
+// ────────────────────────────────────────────
+// System manager mock
+// ────────────────────────────────────────────
+
+const SYSTEM_MANAGER_MENTION: AiColleagueData = {
+  id: "system-manager",
+  name: "频道管理员",
+  nickname: "频道管理员",
+  role: "频道管理员",
+  system_prompt: "",
+  capabilities: "[]",
+  status: "idle",
+  current_task: null,
+  model: null,
+  type: "manager",
+  created_at: "",
+  role_id: null,
+  personal_notes: null,
+}
+
+// ────────────────────────────────────────────
+// 主组件
+// ────────────────────────────────────────────
+
 export function ChannelView(): React.ReactElement {
   const [channels, setChannels] = useState<ChannelData[]>([])
   const [messages, setMessages] = useState<MessageData[]>([])
@@ -69,12 +278,9 @@ export function ChannelView(): React.ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newChannelName, setNewChannelName] = useState("")
   const [hasSystemManager, setHasSystemManager] = useState(false)
-  // Feature 1: Typing indicator
   const [typingColleagues, setTypingColleagues] = useState<Map<string, string>>(new Map())
-  // Feature 2: Reply-To / Quote Reply
   const [replyToId, setReplyToId] = useState<string | null>(null)
   const [replyToContent, setReplyToContent] = useState<string>("")
-  // Hover state for message reply buttons
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const addToast = useToastStore((s) => s.addToast)
   const setStoreChannelId = useAppStore((s) => s.setSelectedChannelId)
@@ -142,7 +348,6 @@ export function ChannelView(): React.ReactElement {
     return unsubscribe
   }, [selectedChannelId, loadMessages])
 
-  // Feature 1: Subscribe to typing indicators and new messages
   useEffect(() => {
     const unsubTypingStart = window.electron.on("ai:typing-start", (colleagueId: unknown, displayName: unknown) => {
       setTypingColleagues((prev) => new Map(prev).set(colleagueId as string, displayName as string))
@@ -176,35 +381,44 @@ export function ChannelView(): React.ReactElement {
   }, [])
 
   const mentionCandidates = hasSystemManager ? [SYSTEM_MANAGER_MENTION, ...aiColleagues] : aiColleagues
-  const mentionOptions = mentionQuery === null
-    ? []
-    : mentionCandidates.filter((colleague) => {
-        const query = mentionQuery.trim().toLowerCase()
-        if (!query) return true
-        return [colleague.name, colleague.nickname, colleague.role]
-          .filter((v): v is string => Boolean(v))
-          .some((v) => v.toLowerCase().includes(query))
-      })
+  const mentionOptions =
+    mentionQuery === null
+      ? []
+      : mentionCandidates.filter((colleague) => {
+          const query = mentionQuery.trim().toLowerCase()
+          if (!query) return true
+          return [colleague.name, colleague.nickname, colleague.role]
+            .filter((v): v is string => Boolean(v))
+            .some((v) => v.toLowerCase().includes(query))
+        })
   const visibleMentionOptions = mentionOptions.slice(0, 6)
 
-  const selectMention = useCallback((colleague: AiColleagueData) => {
-    const mentionName = getColleagueMentionName(colleague)
-    setInputValue((current) => {
-      const next = current.replace(/(^|\s)@([^\s@]*)$/, `$1@${mentionName} `)
-      setTimeout(() => inputRef.current?.focus(), 0)
-      return next
-    })
-    setMentionQuery(null)
-    setSelectedMentionIndex(0)
-  }, [getColleagueMentionName])
+  const selectMention = useCallback(
+    (colleague: AiColleagueData) => {
+      const mentionName = getColleagueMentionName(colleague)
+      setInputValue((current) => {
+        const next = current.replace(/(^|\s)@([^\s@]*)$/, `$1@${mentionName} `)
+        setTimeout(() => inputRef.current?.focus(), 0)
+        return next
+      })
+      setMentionQuery(null)
+      setSelectedMentionIndex(0)
+    },
+    [getColleagueMentionName]
+  )
 
-  const findMentionedColleague = useCallback((content: string) => {
-    const candidates = hasSystemManager ? [SYSTEM_MANAGER_MENTION, ...aiColleagues] : aiColleagues
-    return candidates.find((colleague) => {
-      const names = [colleague.name, colleague.nickname].filter((v): v is string => Boolean(v))
-      return names.some((name) => content.includes(`@${name}`))
-    }) ?? null
-  }, [aiColleagues, hasSystemManager])
+  const findMentionedColleague = useCallback(
+    (content: string) => {
+      const candidates = hasSystemManager ? [SYSTEM_MANAGER_MENTION, ...aiColleagues] : aiColleagues
+      return (
+        candidates.find((colleague) => {
+          const names = [colleague.name, colleague.nickname].filter((v): v is string => Boolean(v))
+          return names.some((name) => content.includes(`@${name}`))
+        }) ?? null
+      )
+    },
+    [aiColleagues, hasSystemManager]
+  )
 
   const handleSend = useCallback(
     (e: FormEvent) => {
@@ -221,7 +435,6 @@ export function ChannelView(): React.ReactElement {
           setMessages((prev) => [...prev, msg])
           setInputValue("")
           setMentionQuery(null)
-          // Feature 2: clear reply state after send
           setReplyToId(null)
           setReplyToContent("")
 
@@ -237,7 +450,9 @@ export function ChannelView(): React.ReactElement {
                 },
                 priority: 2,
               })
-              .catch((e) => addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
+              .catch((e) =>
+                addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error")
+              )
           } else if (aiColleagues.length > 0) {
             window.electron
               .invoke("ai:task-create", {
@@ -248,48 +463,69 @@ export function ChannelView(): React.ReactElement {
                 },
                 priority: 3,
               })
-              .catch((e) => addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
+              .catch((e) =>
+                addToast(`创建AI任务失败: ${e instanceof Error ? e.message : String(e)}`, "error")
+              )
           }
         })
-        .catch((e) => addToast(`发送消息失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
+        .catch((e) =>
+          addToast(`发送消息失败: ${e instanceof Error ? e.message : String(e)}`, "error")
+        )
     },
-    [inputValue, selectedChannelId, aiColleagues.length, findMentionedColleague, getColleagueMentionName, addToast, replyToId]
+    [
+      inputValue,
+      selectedChannelId,
+      aiColleagues.length,
+      findMentionedColleague,
+      getColleagueMentionName,
+      addToast,
+      replyToId,
+    ]
   )
 
-  const handleInputChange = useCallback((value: string) => {
-    setInputValue(value)
-    updateMentionQuery(value)
-  }, [updateMentionQuery])
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInputValue(value)
+      updateMentionQuery(value)
+    },
+    [updateMentionQuery]
+  )
 
-  const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (mentionQuery === null || visibleMentionOptions.length === 0) {
-      if (e.key === "Escape") setMentionQuery(null)
-      return
-    }
+  const handleInputKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (mentionQuery === null || visibleMentionOptions.length === 0) {
+        if (e.key === "Escape") setMentionQuery(null)
+        return
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedMentionIndex((idx) => (idx + 1) % visibleMentionOptions.length)
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedMentionIndex(
+          (idx) => (idx - 1 + visibleMentionOptions.length) % visibleMentionOptions.length
+        )
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault()
+        selectMention(visibleMentionOptions[selectedMentionIndex] ?? visibleMentionOptions[0])
+      } else if (e.key === "Escape") {
+        e.preventDefault()
+        setMentionQuery(null)
+      }
+    },
+    [mentionQuery, visibleMentionOptions, selectedMentionIndex, selectMention]
+  )
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault()
-      setSelectedMentionIndex((idx) => (idx + 1) % visibleMentionOptions.length)
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setSelectedMentionIndex((idx) => (idx - 1 + visibleMentionOptions.length) % visibleMentionOptions.length)
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault()
-      selectMention(visibleMentionOptions[selectedMentionIndex] ?? visibleMentionOptions[0])
-    } else if (e.key === "Escape") {
-      e.preventDefault()
-      setMentionQuery(null)
-    }
-  }, [mentionQuery, visibleMentionOptions, selectedMentionIndex, selectMention])
-
-  const selectChannel = useCallback((id: string) => {
-    setSelectedChannelId(id)
-    setStoreChannelId(id)
-    setMessages([])
-    // Reset reply state when switching channels
-    setReplyToId(null)
-    setReplyToContent("")
-  }, [setStoreChannelId])
+  const selectChannel = useCallback(
+    (id: string) => {
+      setSelectedChannelId(id)
+      setStoreChannelId(id)
+      setMessages([])
+      setReplyToId(null)
+      setReplyToContent("")
+    },
+    [setStoreChannelId]
+  )
 
   const handleCreateChannel = useCallback(() => {
     const name = newChannelName.trim()
@@ -318,7 +554,7 @@ export function ChannelView(): React.ReactElement {
         })
         .catch((e) => addToast(`删除频道失败: ${e instanceof Error ? e.message : String(e)}`, "error"))
     },
-    [selectedChannelId, loadChannels, addToast]
+    [selectedChannelId, loadChannels, addToast, setStoreChannelId]
   )
 
   const colleagueNames = [
@@ -426,7 +662,6 @@ export function ChannelView(): React.ReactElement {
             </div>
           ))}
         </ScrollArea>
-
       </div>
 
       {/* Message area */}
@@ -442,7 +677,9 @@ export function ChannelView(): React.ReactElement {
           <>
             <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2 shrink-0">
               <Hash className="w-5 h-5 text-[var(--text-muted)]" />
-              <span className="font-semibold text-[15px] text-[var(--text-primary)]">{selectedChannel.name}</span>
+              <span className="font-semibold text-[15px] text-[var(--text-primary)]">
+                {selectedChannel.name}
+              </span>
             </div>
 
             <ScrollArea className="flex-1 min-h-0 px-4">
@@ -459,66 +696,83 @@ export function ChannelView(): React.ReactElement {
                 </div>
               ) : (
                 <div className="py-3 flex flex-col gap-2">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className="flex gap-3 px-2 py-1 -mx-2 rounded-md hover:bg-[var(--bg-hover)]/50 transition-colors group"
-                      onMouseEnter={() => setHoveredMessageId(msg.id)}
-                      onMouseLeave={() => setHoveredMessageId(null)}
-                    >
-                      <AvatarGradient name={msg.sender_id} className="w-9 h-9 text-xs" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[13.5px] font-semibold text-[var(--text-primary)]">
-                            {msg.sender_id}
-                          </span>
-                          <span className="text-[11px] text-[var(--text-muted)]">
-                            {new Date(msg.created_at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          {/* Feature 2: Reply button on hover */}
-                          {hoveredMessageId === msg.id && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReplyToId(msg.id)
-                                setReplyToContent(msg.content.slice(0, 60))
-                                inputRef.current?.focus()
+                  {messages.map((msg) => {
+                    const parsed = parseMessageContent(msg.content)
+                    const isAI = msg.sender_id !== "current-user" && msg.sender_id !== "human"
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className="flex gap-3 px-2 py-1 -mx-2 rounded-md hover:bg-[var(--bg-hover)]/50 transition-colors group"
+                        onMouseEnter={() => setHoveredMessageId(msg.id)}
+                        onMouseLeave={() => setHoveredMessageId(null)}
+                      >
+                        <AvatarGradient name={msg.sender_id} className="w-9 h-9 text-xs" />
+                        <div className="min-w-0 flex-1">
+                          {/* 消息头：发件人 + 时间 + 回复按钮 */}
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-[13.5px] font-semibold text-[var(--text-primary)]">
+                              {msg.sender_id}
+                            </span>
+                            <span className="text-[11px] text-[var(--text-muted)]">
+                              {new Date(msg.created_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            {hoveredMessageId === msg.id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyToId(msg.id)
+                                  setReplyToContent(msg.content.slice(0, 60))
+                                  inputRef.current?.focus()
+                                }}
+                                className="ml-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)]"
+                              >
+                                回复
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 引用回复 */}
+                          {msg.reply_to_id && (
+                            <div
+                              style={{
+                                borderLeft: "2px solid var(--accent)",
+                                paddingLeft: "8px",
+                                fontSize: "12px",
+                                color: "var(--text-muted)",
+                                marginBottom: "4px",
                               }}
-                              className="ml-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)]"
                             >
-                              回复
-                            </button>
+                              回复了一条消息
+                            </div>
+                          )}
+
+                          {/* AI 消息：技能标签 + 思考过程 + 正文 */}
+                          {isAI ? (
+                            <>
+                              {parsed.skill && <SkillBadge skill={parsed.skill} />}
+                              {parsed.thinking && <ThinkingBlock thinking={parsed.thinking} />}
+                              <MessageBody body={parsed.body} colleagueNames={colleagueNames} />
+                            </>
+                          ) : (
+                            /* 用户消息：直接渲染原始内容 */
+                            <p className="text-[13.5px] leading-relaxed text-[var(--text-primary)] break-words whitespace-pre-wrap">
+                              {highlightMentions(msg.content, colleagueNames)}
+                            </p>
                           )}
                         </div>
-                        {/* Feature 2: Show quote reference if this message is a reply */}
-                        {msg.reply_to_id && (
-                          <div
-                            style={{
-                              borderLeft: "2px solid var(--accent)",
-                              paddingLeft: "8px",
-                              fontSize: "12px",
-                              color: "var(--text-muted)",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            回复了一条消息
-                          </div>
-                        )}
-                        <p className="text-[13.5px] leading-relaxed text-[var(--text-primary)] break-words whitespace-pre-wrap">
-                          {highlightMentions(msg.content, colleagueNames)}
-                        </p>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
               )}
             </ScrollArea>
 
-            {/* Feature 1: Typing indicators */}
+            {/* 输入中提示 */}
             {typingColleagues.size > 0 && (
               <div className="px-4">
                 {Array.from(typingColleagues.entries()).map(([id, name]) => (
@@ -531,8 +785,12 @@ export function ChannelView(): React.ReactElement {
               </div>
             )}
 
-            <form onSubmit={handleSend} className="px-4 py-3 border-t border-[var(--border-subtle)] flex flex-col gap-2 shrink-0">
-              {/* Feature 2: Quote reply card */}
+            {/* 输入区 */}
+            <form
+              onSubmit={handleSend}
+              className="px-4 py-3 border-t border-[var(--border-subtle)] flex flex-col gap-2 shrink-0"
+            >
+              {/* 引用回复卡片 */}
               {replyToId && (
                 <div
                   style={{
@@ -555,7 +813,8 @@ export function ChannelView(): React.ReactElement {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    回复: {replyToContent}{replyToContent.length >= 60 ? "..." : ""}
+                    回复: {replyToContent}
+                    {replyToContent.length >= 60 ? "..." : ""}
                   </span>
                   <button
                     type="button"
@@ -616,7 +875,7 @@ export function ChannelView(): React.ReactElement {
         )}
       </div>
 
-      {/* Create Channel Dialog */}
+      {/* 新建频道对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>

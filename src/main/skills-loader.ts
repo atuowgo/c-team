@@ -78,3 +78,25 @@ export function loadSkillBody(skillName: string): string | null {
   const meta = parseSkillMd(content)
   return meta?.body ?? null
 }
+
+/**
+ * 加载所有 skills 的完整信息（name + description + body），供 AI 自动选技能使用。
+ */
+export function loadAllSkillsWithBodies(): SkillMeta[] {
+  const dir = getSkillsDir()
+  if (!existsSync(dir)) return []
+
+  const skills: SkillMeta[] = []
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const skillMdPath = join(dir, entry.name, 'SKILL.md')
+    if (!existsSync(skillMdPath)) continue
+
+    const content = readFileSync(skillMdPath, 'utf-8')
+    const meta = parseSkillMd(content)
+    if (meta) skills.push(meta)
+  }
+
+  return skills
+}

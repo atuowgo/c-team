@@ -5,7 +5,44 @@ import { createBranch, commitFile, createPullRequest } from './github-api'
 import { aiScheduler } from './ai-scheduler'
 import { startPlanningPhase } from './planning-phase'
 import { processMemoryJobs, assembleContext } from './memory-manager'
+import { loadAllSkillsWithBodies } from './skills-loader'
 import { BrowserWindow } from 'electron'
+
+/**
+ * 构建带技能指令和思考过程要求的 system prompt。
+ * 所有 chat reply 场景（普通同事和 system-manager）均使用此函数增强 prompt。
+ */
+function buildEnhancedSystemPrompt(basePrompt: string): string {
+  let prompt = basePrompt || 'You are a helpful assistant.'
+
+  const skills = loadAllSkillsWithBodies()
+  if (skills.length > 0) {
+    const skillsSection = [
+      '',
+      '## 可用技能 (Available Skills)',
+      '根据用户问题，自动判断并使用合适的技能。使用技能时，在回答最开头用 `[SKILL: skill-name]` 标注（如 `[SKILL: mermaid]`）。若不需要技能则直接回答，无需标注。',
+      '',
+      ...skills.map(
+        (s) => `### 技能: ${s.name}\n**描述**: ${s.description}\n\n${s.body}`
+      ),
+    ].join('\n')
+    prompt += skillsSection
+  }
+
+  prompt += [
+    '',
+    '## 思考过程',
+    '回答前，请先在 `<think>` 和 `</think>` 标签之间简要写出你的分析思路（3-6句），然后再给出正式回答。',
+    '格式示例：',
+    '<think>',
+    '用户询问的是...，我需要考虑...，最佳方案是...',
+    '</think>',
+    '',
+    '正式回答内容...',
+  ].join('\n')
+
+  return prompt
+}
 
 // Main entry point: called when a task is assigned to a colleague
 export async function startProgrammingSession(taskId: string): Promise<void> {
@@ -125,7 +162,7 @@ async function startChatReply(
   notifyRenderer('ai:typing-start', colleagueId, displayName)
 
   try {
-    const systemPrompt = (colleague.system_prompt as string) || 'You are a helpful assistant.'
+    const systemPrompt = buildEnhancedSystemPrompt((colleague.system_prompt as string) || '')
     const context = assembleContext(colleagueId, channelId, null)
     const messages = [...context, { role: 'user' as const, content: message }]
     let response: string
